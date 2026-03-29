@@ -94,10 +94,7 @@ onUnmounted(() => window.removeEventListener('resize', handleResize))
 const menuItems = [
   { path: '/dashboard', label: '仪表盘', icon: 'House' },
   { path: '/customers', label: '客户管理', icon: 'User' },
-  { path: '/regions', label: '直播地区', icon: 'Location' },
-  { path: '/routes', label: '直播线路', icon: 'Connection' },
-  { path: '/servers', label: '服务器', icon: 'Monitor' },
-  { path: '/nodes', label: '节点', icon: 'Share' },
+  { path: '/live-resources', label: '直播资源', icon: 'Grid' },
   { path: '/tokens', label: 'API Token', icon: 'Key' },
   { path: '/audit-logs', label: '操作日志', icon: 'Document' },
   { path: '/settings', label: '系统设置', icon: 'Setting' },

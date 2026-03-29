@@ -96,6 +96,10 @@ func Setup(r *gin.Engine, h *api.Handler, cfg *config.Config, database *gorm.DB,
 		}
 
 		fileServer := http.FileServer(http.FS(staticFiles))
+		// Wrap with StripPrefix so the file server can resolve paths
+		// when a base path (e.g. /mgmt-xxxx) is configured.
+		fileHandler := http.StripPrefix(base, fileServer)
+
 		r.NoRoute(func(c *gin.Context) {
 			urlPath := c.Request.URL.Path
 			// API routes that are not found should return 404 JSON
@@ -103,11 +107,14 @@ func Setup(r *gin.Engine, h *api.Handler, cfg *config.Config, database *gorm.DB,
 				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 				return
 			}
+			// Strip base path prefix, then leading slash to get the relative
+			// path within the embedded static FS.
+			trimmed := strings.TrimPrefix(urlPath, base)
+			trimmed = strings.TrimPrefix(trimmed, "/")
 			// Try to serve static asset file; on failure fall back to index.html (SPA)
-			trimmed := strings.TrimPrefix(urlPath, "/")
 			if trimmed != "" && trimmed != "index.html" {
 				if _, err := staticFiles.Open(trimmed); err == nil {
-					fileServer.ServeHTTP(c.Writer, c.Request)
+					fileHandler.ServeHTTP(c.Writer, c.Request)
 					return
 				}
 			}

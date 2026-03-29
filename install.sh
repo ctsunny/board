@@ -286,9 +286,9 @@ show_help() {
     echo -e "Usage: $0 ${GREEN}[command]${NC}"
     echo ""
     echo "Commands:"
-    printf "  ${GREEN}%-12s${NC} %s\n" "install"   "Install Board (default)"
-    printf "  ${GREEN}%-12s${NC} %s\n" "uninstall" "Uninstall Board"
+    printf "  ${GREEN}%-12s${NC} %s\n" "install"   "Install Board"
     printf "  ${GREEN}%-12s${NC} %s\n" "update"    "Update to latest version"
+    printf "  ${GREEN}%-12s${NC} %s\n" "uninstall" "Uninstall Board"
     printf "  ${GREEN}%-12s${NC} %s\n" "start"     "Start service"
     printf "  ${GREEN}%-12s${NC} %s\n" "stop"      "Stop service"
     printf "  ${GREEN}%-12s${NC} %s\n" "restart"   "Restart service"
@@ -296,9 +296,40 @@ show_help() {
     printf "  ${GREEN}%-12s${NC} %s\n" "log"       "Show recent logs"
 }
 
+show_menu() {
+    echo ""
+    print_banner "╔════════════════════════════════════════════════════════╗"
+    print_banner "║            Board 管理脚本                             ║"
+    print_banner "╠════════════════════════════════════════════════════════╣"
+    printf "  ${GREEN}1)${NC} 安装 Board\n"
+    printf "  ${GREEN}2)${NC} 更新 Board\n"
+    printf "  ${GREEN}3)${NC} 卸载 Board\n"
+    printf "  ${GREEN}4)${NC} 启动服务\n"
+    printf "  ${GREEN}5)${NC} 停止服务\n"
+    printf "  ${GREEN}6)${NC} 重启服务\n"
+    printf "  ${GREEN}7)${NC} 查看状态\n"
+    printf "  ${GREEN}8)${NC} 查看日志\n"
+    printf "  ${GREEN}0)${NC} 退出\n"
+    print_banner "╚════════════════════════════════════════════════════════╝"
+    echo ""
+    read -rp "请选择操作 [0-8]: " choice
+    case "${choice}" in
+        1) install ;;
+        2) update ;;
+        3) uninstall ;;
+        4) start_service ;;
+        5) stop_service ;;
+        6) restart_service ;;
+        7) show_status ;;
+        8) show_log ;;
+        0) exit 0 ;;
+        *) print_error "无效选项: ${choice}"; show_menu ;;
+    esac
+}
+
 # Main entry
-case "$1" in
-    install|"") install ;;
+case "${1:-}" in
+    install)    install ;;
     uninstall)  uninstall ;;
     update)     update ;;
     start)      start_service ;;
@@ -306,5 +337,7 @@ case "$1" in
     restart)    restart_service ;;
     status)     show_status ;;
     log)        show_log ;;
+    help)       show_help ;;
+    "")         show_menu ;;
     *)          show_help ;;
 esac

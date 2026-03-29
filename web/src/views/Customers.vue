@@ -290,7 +290,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete, Refresh, Download } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { customersApi, regionsApi, routesApi, serversApi, nodesApi } from '@/api'
-import { formatDate, formatBytes, formatMoney, isExpired, isExpiringSoon, downloadBlob } from '@/utils'
+import { formatDate, formatBytes, formatMoney, isExpired, isExpiringSoon, downloadBlob, getListData } from '@/utils'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -353,18 +353,7 @@ function expiryClass(date: unknown) {
   return ''
 }
 
-function getList(data: unknown): Record<string, unknown>[] {
-  if (Array.isArray(data)) return data as Record<string, unknown>[]
-  if (data && typeof data === 'object') {
-    const page = data as { data?: unknown[]; list?: unknown[]; items?: unknown[] }
-    if (Array.isArray(page.data)) return page.data as Record<string, unknown>[]
-    if (Array.isArray(page.list)) return page.list as Record<string, unknown>[]
-    if (Array.isArray(page.items)) return page.items as Record<string, unknown>[]
-  }
-  return []
-}
-
-function formatFormDate(date: unknown): string {
+function formatDateForForm(date: unknown): string {
   if (!date) return ''
   return formatDate(date as string, 'YYYY-MM-DD')
 }
@@ -393,6 +382,29 @@ function buildPayload() {
   return payload
 }
 
+async function loadPagedOptions(apiList: (params?: Record<string, unknown>) => Promise<{ data: unknown }>) {
+  const perPage = 200
+  const firstRes = await apiList({ page: 1, per_page: perPage })
+  const firstData = firstRes.data
+  const firstList = getListData(firstData)
+  if (!firstData || Array.isArray(firstData) || typeof firstData !== 'object') {
+    return firstList
+  }
+
+  const total = Number((firstData as { total?: number }).total ?? firstList.length)
+  if (!Number.isFinite(total) || total <= firstList.length) {
+    return firstList
+  }
+
+  const pages = Math.ceil(total / perPage)
+  const rest = await Promise.allSettled(
+    Array.from({ length: pages - 1 }, (_, index) => apiList({ page: index + 2, per_page: perPage }))
+  )
+  return firstList.concat(
+    rest.flatMap((result) => (result.status === 'fulfilled' ? getListData(result.value.data) : []))
+  )
+}
+
 async function loadData() {
   loading.value = true
   try {
@@ -402,8 +414,8 @@ async function loadData() {
       ...filters,
     }
     const res = await customersApi.list(params)
-    const d = res.data as { data?: unknown[]; list?: unknown[]; total?: number; items?: unknown[] }
-    list.value = getList(d)
+    const d = res.data as { total?: number }
+    list.value = getListData(d)
     total.value = d.total ?? list.value.length
   } catch {
     list.value = []
@@ -414,16 +426,16 @@ async function loadData() {
 
 async function loadSelects() {
   try {
-    const [regionRes, routeRes, serverRes, nodeRes] = await Promise.all([
+    const [regionRes, routeList, serverRes, nodeList] = await Promise.all([
       regionsApi.list(),
-      routesApi.list({ page: 1, per_page: 200 }),
+      loadPagedOptions(routesApi.list),
       serversApi.list(),
-      nodesApi.list({ page: 1, per_page: 200 }),
+      loadPagedOptions(nodesApi.list),
     ])
-    regions.value = getList(regionRes.data)
-    routes.value = getList(routeRes.data)
-    servers.value = getList(serverRes.data)
-    nodes.value = getList(nodeRes.data)
+    regions.value = getListData(regionRes.data)
+    routes.value = routeList
+    servers.value = getListData(serverRes.data)
+    nodes.value = nodeList
   } catch {
     regions.value = []
     routes.value = []
@@ -459,7 +471,7 @@ function openEdit(row: Record<string, unknown>) {
     status: row.status ?? 'active',
     billing_type: row.billing_type ?? 'monthly',
     amount: row.amount ?? 0,
-    expires_at: formatFormDate(row.expires_at),
+    expires_at: formatDateForForm(row.expires_at),
     region_name: row.region_name ?? '',
     route_name: row.route_name ?? '',
     server_name: row.server_name ?? '',

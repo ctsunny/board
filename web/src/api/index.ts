@@ -100,8 +100,10 @@ export const tokensApi = {
 export const settingsApi = {
   get: () => http.get('/settings'),
   update: (data: Record<string, unknown>) => http.put('/settings', data),
+  testGmailSend: (to?: string) => http.post('/settings/gmail/test', { to }),
   getGmailAuthUrl: () => http.get('/settings/gmail/auth-url'),
   submitGmailCallback: (code: string) => http.post('/settings/gmail/callback', { code }),
+  testTelegramSend: () => http.post('/settings/telegram/test'),
 }
 
 // ── System ────────────────────────────────────────────────────────────────────

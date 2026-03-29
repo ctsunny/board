@@ -55,7 +55,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { auditLogsApi } from '@/api'
-import { formatDate } from '@/utils'
+import { formatDate, getListData } from '@/utils'
 import PageHeader from '@/components/PageHeader.vue'
 
 const loading = ref(false)
@@ -75,7 +75,7 @@ async function loadData() {
   try {
     const params: Record<string, unknown> = {
       page: page.value,
-      page_size: pageSize.value,
+      per_page: pageSize.value,
       action: filters.action,
       resource: filters.resource,
     }
@@ -84,8 +84,8 @@ async function loadData() {
       params.end_date = filters.date_range[1]
     }
     const res = await auditLogsApi.list(params)
-    const d = res.data as { list?: unknown[]; total?: number; items?: unknown[] }
-    list.value = (d.list ?? d.items ?? []) as Record<string, unknown>[]
+    const d = res.data as { total?: number }
+    list.value = getListData(d)
     total.value = d.total ?? list.value.length
   } catch {
     list.value = []

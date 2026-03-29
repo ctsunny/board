@@ -15,23 +15,28 @@ import (
 	"github.com/ctsunny/board/internal/config"
 	"github.com/ctsunny/board/internal/models"
 	"github.com/robfig/cron/v3"
-	"gorm.io/gorm"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	"gorm.io/gorm"
 )
 
 const gmailScope = "https://www.googleapis.com/auth/gmail.send"
 
 type GmailNotifier struct {
-	cfg config.GmailConfig
+	cfg *config.GmailConfig
 }
 
 func NewGmailNotifier(cfg config.GmailConfig) *GmailNotifier {
+	cfgCopy := cfg
+	return &GmailNotifier{cfg: &cfgCopy}
+}
+
+func NewGmailNotifierRef(cfg *config.GmailConfig) *GmailNotifier {
 	return &GmailNotifier{cfg: cfg}
 }
 
 func (n *GmailNotifier) IsConfigured() bool {
-	return n.cfg.RefreshToken != "" && n.cfg.ClientID != "" && n.cfg.ClientSecret != ""
+	return n != nil && n.cfg != nil && n.cfg.RefreshToken != "" && n.cfg.ClientID != "" && n.cfg.ClientSecret != ""
 }
 
 func (n *GmailNotifier) oauthConfig() *oauth2.Config {
@@ -89,6 +94,54 @@ func (n *GmailNotifier) SendEmail(to, subject, body string) error {
 	return nil
 }
 
+type TelegramNotifier struct {
+	cfg *config.TelegramConfig
+}
+
+func NewTelegramNotifier(cfg config.TelegramConfig) *TelegramNotifier {
+	cfgCopy := cfg
+	return &TelegramNotifier{cfg: &cfgCopy}
+}
+
+func NewTelegramNotifierRef(cfg *config.TelegramConfig) *TelegramNotifier {
+	return &TelegramNotifier{cfg: cfg}
+}
+
+func (n *TelegramNotifier) IsConfigured() bool {
+	return n != nil && n.cfg != nil && strings.TrimSpace(n.cfg.BotToken) != "" && strings.TrimSpace(n.cfg.ChatID) != ""
+}
+
+func (n *TelegramNotifier) SendMessage(text string) error {
+	if !n.IsConfigured() {
+		return fmt.Errorf("telegram not configured")
+	}
+	payload := map[string]string{
+		"chat_id": n.cfg.ChatID,
+		"text":    text,
+	}
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequest(http.MethodPost,
+		"https://api.telegram.org/bot"+n.cfg.BotToken+"/sendMessage",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("telegram API error %d: %s", resp.StatusCode, string(respBody))
+	}
+	return nil
+}
+
 func buildRawEmail(from, to, subject, body string) string {
 	var sb strings.Builder
 	sb.WriteString("From: " + from + "\r\n")
@@ -119,16 +172,57 @@ func (n *GmailNotifier) SendServerDownAlert(server models.Server) error {
 	return n.SendEmail(n.cfg.AdminEmail, subject, body)
 }
 
-func StartExpiryScheduler(database *gorm.DB, cfg *config.Config, notifier *GmailNotifier) {
+func (n *TelegramNotifier) SendExpiryReminder(customer models.Customer, daysLeft int) error {
+	return n.SendMessage(fmt.Sprintf(
+		"📅 客户到期提醒\n客户：%s\n联系方式：%s\n到期日：%s\n剩余天数：%d",
+		customer.Name,
+		customer.Contact,
+		customer.ExpiresAt.Format("2006-01-02"),
+		daysLeft,
+	))
+}
+
+func (n *TelegramNotifier) SendNewCustomerAlert(customer models.Customer) error {
+	return n.SendMessage(fmt.Sprintf(
+		"🆕 新增客户提醒\n客户：%s\n联系方式：%s\n地区：%s\n线路：%s\n服务器：%s\n节点：%s",
+		customer.Name,
+		customer.Contact,
+		customer.RegionName,
+		customer.RouteName,
+		customer.ServerName,
+		customer.NodeName,
+	))
+}
+
+func (n *TelegramNotifier) SendLoginAlert(username, ip string) error {
+	return n.SendMessage(fmt.Sprintf(
+		"🔐 登录提醒\n账号：%s\nIP：%s\n时间：%s",
+		username,
+		ip,
+		time.Now().Format(time.RFC3339),
+	))
+}
+
+func (n *TelegramNotifier) SendFailedLoginAlert(username, ip string, attempts int64) error {
+	return n.SendMessage(fmt.Sprintf(
+		"⚠️ 密码错误提醒\n账号：%s\nIP：%s\n失败次数：%d\n时间：%s",
+		username,
+		ip,
+		attempts,
+		time.Now().Format(time.RFC3339),
+	))
+}
+
+func StartExpiryScheduler(database *gorm.DB, cfg *config.Config, notifier *GmailNotifier, telegram *TelegramNotifier) {
 	c := cron.New()
 	c.AddFunc("0 9 * * *", func() {
-		checkAndNotifyExpiry(database, cfg, notifier)
+		checkAndNotifyExpiry(database, cfg, notifier, telegram)
 	})
 	c.Start()
 }
 
-func checkAndNotifyExpiry(database *gorm.DB, cfg *config.Config, notifier *GmailNotifier) {
-	if !notifier.IsConfigured() {
+func checkAndNotifyExpiry(database *gorm.DB, cfg *config.Config, notifier *GmailNotifier, telegram *TelegramNotifier) {
+	if (notifier == nil || !notifier.IsConfigured()) && (telegram == nil || !telegram.IsConfigured()) {
 		return
 	}
 	now := time.Now()
@@ -138,23 +232,50 @@ func checkAndNotifyExpiry(database *gorm.DB, cfg *config.Config, notifier *Gmail
 
 		var customers []models.Customer
 		database.Where("status = 'active' AND expires_at BETWEEN ? AND ?", start, end).Find(&customers)
-		for _, c := range customers {
-			err := notifier.SendExpiryReminder(c, days)
-			status := "sent"
-			errMsg := ""
-			if err != nil {
-				status = "failed"
-				errMsg = err.Error()
-			}
-			database.Create(&models.NotificationLog{
-				Type:           "expiry",
+		for _, customer := range customers {
+			logNotification(database, models.NotificationLog{
+				Type:           "expiry_email",
 				RecipientEmail: cfg.Gmail.AdminEmail,
-				Subject:        fmt.Sprintf("Customer %s expires in %d day(s)", c.Name, days),
-				Status:         status,
-				Error:          errMsg,
+				Subject:        fmt.Sprintf("Customer %s expires in %d day(s)", customer.Name, days),
+			}, notifier != nil && notifier.IsConfigured(), func() error {
+				return notifier.SendExpiryReminder(customer, days)
+			})
+			logNotification(database, models.NotificationLog{
+				Type:    "expiry_tg",
+				Subject: fmt.Sprintf("Customer %s expires in %d day(s)", customer.Name, days),
+			}, telegram != nil && telegram.IsConfigured(), func() error {
+				return telegram.SendExpiryReminder(customer, days)
 			})
 		}
 	}
+}
+
+func LogTelegramNotification(database *gorm.DB, telegram *TelegramNotifier, typ, subject string, send func() error) {
+	logNotification(database, models.NotificationLog{
+		Type:    typ,
+		Subject: subject,
+	}, telegram != nil && telegram.IsConfigured(), send)
+}
+
+func CountRecentFailedLogins(database *gorm.DB, username, ip string, since time.Time) int64 {
+	var count int64
+	database.Model(&models.AuditLog{}).
+		Where("action = ? AND resource = ? AND operator = ? AND ip = ? AND created_at >= ?", "login_failed", "auth", username, ip, since).
+		Count(&count)
+	return count
+}
+
+func logNotification(database *gorm.DB, record models.NotificationLog, enabled bool, send func() error) {
+	if !enabled {
+		return
+	}
+	err := send()
+	record.Status = "sent"
+	if err != nil {
+		record.Status = "failed"
+		record.Error = err.Error()
+	}
+	database.Create(&record)
 }
 
 func GetOAuthURL(clientID, clientSecret string) string {
@@ -183,7 +304,6 @@ func ExchangeCode(clientID, clientSecret, code string) (refreshToken string, ema
 		return "", "", err
 	}
 
-	// Fetch user email
 	client := oauthCfg.Client(ctx, token)
 	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo?fields=email")
 	if err == nil {
@@ -196,7 +316,6 @@ func ExchangeCode(clientID, clientSecret, code string) (refreshToken string, ema
 		}
 	}
 
-	// Fallback: parse id_token if present
 	if email == "" {
 		if idToken, ok := token.Extra("id_token").(string); ok {
 			parts := strings.Split(idToken, ".")
@@ -216,8 +335,6 @@ func ExchangeCode(clientID, clientSecret, code string) (refreshToken string, ema
 	return token.RefreshToken, email, nil
 }
 
-// fetchUserEmail is a fallback to retrieve the user's email via the tokeninfo endpoint.
-// It is used when the id_token-based extraction in ExchangeCode fails.
 func fetchUserEmail(accessToken string) string {
 	resp, err := http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + url.QueryEscape(accessToken))
 	if err != nil {

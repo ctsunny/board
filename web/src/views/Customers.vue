@@ -59,14 +59,35 @@
         v-loading="loading"
         :data="list"
         @selection-change="selection = $event"
+        @sort-change="handleSortChange"
         row-key="id"
       >
         <el-table-column type="selection" width="42" />
-        <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column prop="name" label="姓名" min-width="110" show-overflow-tooltip />
-        <el-table-column prop="contact" label="联系方式" min-width="120" show-overflow-tooltip />
-        <el-table-column prop="region_name" label="地区" min-width="110" show-overflow-tooltip />
-        <el-table-column label="线路" min-width="150">
+        <el-table-column prop="id" label="ID" width="70" sortable="custom" />
+        <el-table-column prop="name" label="姓名" min-width="110" show-overflow-tooltip sortable="custom" />
+        <el-table-column label="到期日" prop="expires_at" width="130" sortable="custom">
+          <template #default="{ row }">
+            <span :class="expiryClass(row.expires_at)">{{ formatDate(row.expires_at, 'YYYY-MM-DD') }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="金额" prop="amount" width="90" sortable="custom">
+          <template #default="{ row }">{{ formatMoney(row.amount) }}</template>
+        </el-table-column>
+        <el-table-column prop="contact" label="联系方式" min-width="120" show-overflow-tooltip sortable="custom" />
+        <el-table-column label="地区" prop="region_name" min-width="140" sortable="custom">
+          <template #default="{ row }">
+            <template v-if="splitMultiValue(row.region_name).length">
+              <el-tag
+                v-for="region in splitMultiValue(row.region_name)"
+                :key="region"
+                size="small"
+                style="margin-right:4px"
+              >{{ region }}</el-tag>
+            </template>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="线路" prop="route_name" min-width="150" sortable="custom">
           <template #default="{ row }">
             <template v-if="splitMultiValue(row.route_name).length">
               <el-tag
@@ -79,7 +100,7 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="服务器" min-width="150">
+        <el-table-column label="服务器" prop="server_name" min-width="150" sortable="custom">
           <template #default="{ row }">
             <template v-if="splitMultiValue(row.server_name).length">
               <el-tag
@@ -92,7 +113,7 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="节点" min-width="150">
+        <el-table-column label="节点" prop="node_name" min-width="150" sortable="custom">
           <template #default="{ row }">
             <template v-if="splitMultiValue(row.node_name).length">
               <el-tag
@@ -105,24 +126,16 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="90">
+        <el-table-column label="状态" width="90" prop="status" sortable="custom">
           <template #default="{ row }">
             <StatusBadge :status="row.status || 'unknown'" />
           </template>
         </el-table-column>
-        <el-table-column prop="billing_type" label="计费类型" width="90" />
+        <el-table-column prop="billing_type" label="计费类型" width="90" sortable="custom" />
         <el-table-column label="流量" width="100">
           <template #default="{ row }">
             {{ row.traffic_used != null ? formatBytes(row.traffic_used) : '-' }}
           </template>
-        </el-table-column>
-        <el-table-column label="到期日" width="130">
-          <template #default="{ row }">
-            <span :class="expiryClass(row.expires_at)">{{ formatDate(row.expires_at, 'YYYY-MM-DD') }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="金额" width="90">
-          <template #default="{ row }">{{ formatMoney(row.amount) }}</template>
         </el-table-column>
         <el-table-column label="标签" min-width="120">
           <template #default="{ row }">
@@ -210,12 +223,12 @@
           <el-col :span="12">
             <el-form-item label="地区">
               <el-select
-                v-model="form.region_name"
-                clearable
+                v-model="form.region_names"
+                multiple
                 filterable
                 allow-create
                 default-first-option
-                placeholder="可选下拉或自定义"
+                placeholder="可多选下拉或自定义"
                 style="width:100%"
               >
                 <el-option
@@ -341,6 +354,8 @@ const nodes = ref<Record<string, unknown>[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
+const sortField = ref('created_at')
+const sortOrder = ref<'asc' | 'desc'>('desc')
 const selection = ref<Record<string, unknown>[]>([])
 const dialogVisible = ref(false)
 const batchRenewVisible = ref(false)
@@ -363,7 +378,7 @@ const form = reactive({
   billing_type: 'monthly',
   amount: 0,
   expires_at: '',
-  region_name: '',
+  region_names: [] as string[],
   route_names: [] as string[],
   server_names: [] as string[],
   node_names: [] as string[],
@@ -425,7 +440,7 @@ function buildPayload() {
     status: form.status,
     billing_type: form.billing_type,
     amount: form.amount,
-    region_name: trimText(form.region_name),
+    region_name: joinMultiValue(form.region_names),
     route_name: joinMultiValue(form.route_names),
     server_name: joinMultiValue(form.server_names),
     node_name: joinMultiValue(form.node_names),
@@ -466,7 +481,9 @@ async function loadData() {
   try {
     const params: Record<string, unknown> = {
       page: page.value,
-      page_size: pageSize.value,
+      per_page: pageSize.value,
+      sort: sortField.value,
+      order: sortOrder.value,
       ...filters,
     }
     const res = await customersApi.list(params)
@@ -509,7 +526,7 @@ function openCreate() {
     billing_type: 'monthly',
     amount: 0,
     expires_at: '',
-    region_name: '',
+    region_names: [],
     route_names: [],
     server_names: [],
     node_names: [],
@@ -528,7 +545,7 @@ function openEdit(row: Record<string, unknown>) {
     billing_type: row.billing_type ?? 'monthly',
     amount: row.amount ?? 0,
     expires_at: formatDateForForm(row.expires_at),
-    region_name: row.region_name ?? '',
+    region_names: splitMultiValue(row.region_name),
     route_names: splitMultiValue(row.route_name),
     server_names: splitMultiValue(row.server_name),
     node_names: splitMultiValue(row.node_name),
@@ -536,6 +553,25 @@ function openEdit(row: Record<string, unknown>) {
     tags: Array.isArray(row.tags) ? (row.tags as string[]).join(',') : row.tags ?? '',
   })
   dialogVisible.value = true
+}
+
+function handleSortChange({ prop, order }: { prop?: string; order?: 'ascending' | 'descending' | null }) {
+  const sortMap: Record<string, string> = {
+    id: 'id',
+    name: 'name',
+    contact: 'contact',
+    region_name: 'region_name',
+    route_name: 'route_name',
+    server_name: 'server_name',
+    node_name: 'node_name',
+    status: 'status',
+    billing_type: 'billing_type',
+    expires_at: 'expires_at',
+    amount: 'amount',
+  }
+  sortField.value = sortMap[prop ?? ''] ?? 'created_at'
+  sortOrder.value = order === 'ascending' ? 'asc' : 'desc'
+  loadData()
 }
 
 async function handleSave() {

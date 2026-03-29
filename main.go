@@ -75,8 +75,9 @@ func main() {
 	}
 
 	// Services
-	notifier := services.NewGmailNotifier(cfg.Gmail)
-	services.StartExpiryScheduler(database, cfg, notifier)
+	notifier := services.NewGmailNotifierRef(&cfg.Gmail)
+	telegramNotifier := services.NewTelegramNotifierRef(&cfg.Telegram)
+	services.StartExpiryScheduler(database, cfg, notifier, telegramNotifier)
 	services.StartPingScheduler(database, cfg, notifier)
 
 	// Static files sub-FS
@@ -94,6 +95,7 @@ func main() {
 		DB:       database,
 		Cfg:      cfg,
 		Notifier: notifier,
+		Telegram: telegramNotifier,
 		CfgPath:  *cfgPath,
 	}
 	router.Setup(engine, h, cfg, database, staticFS)

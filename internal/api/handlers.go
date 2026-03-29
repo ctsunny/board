@@ -23,6 +23,7 @@ type Handler struct {
 	DB       *gorm.DB
 	Cfg      *config.Config
 	Notifier *services.GmailNotifier
+	Telegram *services.TelegramNotifier
 	CfgPath  string
 }
 
@@ -37,7 +38,7 @@ type PageResult struct {
 
 func pageParams(c *gin.Context) (page, perPage int) {
 	page, _ = strconv.Atoi(c.DefaultQuery("page", "1"))
-	perPage, _ = strconv.Atoi(c.DefaultQuery("per_page", "20"))
+	perPage, _ = strconv.Atoi(c.DefaultQuery("per_page", c.DefaultQuery("page_size", "20")))
 	if page < 1 {
 		page = 1
 	}
@@ -58,13 +59,24 @@ func clientIP(c *gin.Context) string {
 	return c.ClientIP()
 }
 
-func (h *Handler) audit(action, resource string, resourceID uint, detail, ip string) {
+func operatorName(c *gin.Context) string {
+	if username := strings.TrimSpace(c.GetString("username")); username != "" {
+		return username
+	}
+	if tokenID, ok := c.Get("api_token_id"); ok {
+		return fmt.Sprintf("api-token:%v", tokenID)
+	}
+	return "system"
+}
+
+func (h *Handler) audit(action, resource string, resourceID uint, detail, ip, operator string) {
 	h.DB.Create(&models.AuditLog{
 		Action:     action,
 		Resource:   resource,
 		ResourceID: resourceID,
 		Detail:     detail,
 		IP:         ip,
+		Operator:   operator,
 	})
 }
 
@@ -80,10 +92,19 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 	if body.Username != h.Cfg.AdminUser {
+		h.audit("login_failed", "auth", 0, "invalid username", clientIP(c), body.Username)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(h.Cfg.AdminPass), []byte(body.Password)); err != nil {
+		ip := clientIP(c)
+		h.audit("login_failed", "auth", 0, "invalid password", ip, body.Username)
+		failures := services.CountRecentFailedLogins(h.DB, body.Username, ip, time.Now().Add(-24*time.Hour))
+		if failures > 0 && failures%5 == 0 {
+			services.LogTelegramNotification(h.DB, h.Telegram, "login_failed_tg", fmt.Sprintf("Login failed %d times for %s", failures, body.Username), func() error {
+				return h.Telegram.SendFailedLoginAlert(body.Username, ip, failures)
+			})
+		}
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
@@ -92,6 +113,11 @@ func (h *Handler) Login(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token generation failed"})
 		return
 	}
+	ip := clientIP(c)
+	h.audit("login", "auth", 0, "login success", ip, body.Username)
+	services.LogTelegramNotification(h.DB, h.Telegram, "login_tg", fmt.Sprintf("Login success for %s", body.Username), func() error {
+		return h.Telegram.SendLoginAlert(body.Username, ip)
+	})
 	c.JSON(http.StatusOK, gin.H{"token": token})
 }
 
@@ -149,7 +175,8 @@ func (h *Handler) ListCustomers(c *gin.Context) {
 		q = q.Where("billing_type = ?", bt)
 	}
 	if tag := c.Query("tag"); tag != "" {
-		q = q.Where("tags LIKE ?", "%"+tag+"%")
+		like := "%" + tag + "%"
+		q = q.Where("(tags LIKE ? OR region_name LIKE ? OR route_name LIKE ? OR server_name LIKE ? OR node_name LIKE ?)", like, like, like, like, like)
 	}
 	if ed := c.Query("expiring_days"); ed != "" {
 		if days, err := strconv.Atoi(ed); err == nil {
@@ -159,7 +186,20 @@ func (h *Handler) ListCustomers(c *gin.Context) {
 
 	sortField := c.DefaultQuery("sort", "created_at")
 	sortOrder := c.DefaultQuery("order", "desc")
-	allowedSort := map[string]bool{"created_at": true, "expires_at": true, "name": true, "amount": true, "status": true}
+	allowedSort := map[string]bool{
+		"created_at":   true,
+		"id":           true,
+		"name":         true,
+		"contact":      true,
+		"region_name":  true,
+		"route_name":   true,
+		"server_name":  true,
+		"node_name":    true,
+		"status":       true,
+		"billing_type": true,
+		"expires_at":   true,
+		"amount":       true,
+	}
 	if !allowedSort[sortField] {
 		sortField = "created_at"
 	}
@@ -190,7 +230,10 @@ func (h *Handler) CreateCustomer(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	h.audit("create", "customer", customer.ID, customer.Name, clientIP(c))
+	h.audit("create", "customer", customer.ID, customer.Name, clientIP(c), operatorName(c))
+	services.LogTelegramNotification(h.DB, h.Telegram, "customer_create_tg", fmt.Sprintf("New customer %s", customer.Name), func() error {
+		return h.Telegram.SendNewCustomerAlert(customer)
+	})
 	c.JSON(http.StatusCreated, customer)
 }
 
@@ -214,7 +257,7 @@ func (h *Handler) UpdateCustomer(c *gin.Context) {
 		return
 	}
 	h.DB.Save(&customer)
-	h.audit("update", "customer", customer.ID, customer.Name, clientIP(c))
+	h.audit("update", "customer", customer.ID, customer.Name, clientIP(c), operatorName(c))
 	c.JSON(http.StatusOK, customer)
 }
 
@@ -225,7 +268,7 @@ func (h *Handler) DeleteCustomer(c *gin.Context) {
 		return
 	}
 	h.DB.Delete(&customer)
-	h.audit("delete", "customer", customer.ID, customer.Name, clientIP(c))
+	h.audit("delete", "customer", customer.ID, customer.Name, clientIP(c), operatorName(c))
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
@@ -238,7 +281,7 @@ func (h *Handler) BatchDeleteCustomers(c *gin.Context) {
 		return
 	}
 	h.DB.Delete(&models.Customer{}, body.IDs)
-	h.audit("batch_delete", "customer", 0, fmt.Sprintf("ids=%v", body.IDs), clientIP(c))
+	h.audit("batch_delete", "customer", 0, fmt.Sprintf("ids=%v", body.IDs), clientIP(c), operatorName(c))
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
@@ -263,7 +306,7 @@ func (h *Handler) BatchRenewCustomers(c *gin.Context) {
 		customers[i].Status = "active"
 		h.DB.Save(&customers[i])
 	}
-	h.audit("batch_renew", "customer", 0, fmt.Sprintf("ids=%v days=%d", body.IDs, body.Days), clientIP(c))
+	h.audit("batch_renew", "customer", 0, fmt.Sprintf("ids=%v days=%d", body.IDs, body.Days), clientIP(c), operatorName(c))
 	c.JSON(http.StatusOK, gin.H{"message": "renewed", "count": len(customers)})
 }
 
@@ -315,7 +358,7 @@ func (h *Handler) CreateRegion(c *gin.Context) {
 		return
 	}
 	h.DB.Create(&region)
-	h.audit("create", "region", region.ID, region.Name, clientIP(c))
+	h.audit("create", "region", region.ID, region.Name, clientIP(c), operatorName(c))
 	c.JSON(http.StatusCreated, region)
 }
 
@@ -330,7 +373,7 @@ func (h *Handler) UpdateRegion(c *gin.Context) {
 		return
 	}
 	h.DB.Save(&region)
-	h.audit("update", "region", region.ID, region.Name, clientIP(c))
+	h.audit("update", "region", region.ID, region.Name, clientIP(c), operatorName(c))
 	c.JSON(http.StatusOK, region)
 }
 
@@ -341,7 +384,7 @@ func (h *Handler) DeleteRegion(c *gin.Context) {
 		return
 	}
 	h.DB.Delete(&region)
-	h.audit("delete", "region", region.ID, region.Name, clientIP(c))
+	h.audit("delete", "region", region.ID, region.Name, clientIP(c), operatorName(c))
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
@@ -363,7 +406,7 @@ func (h *Handler) CreateServer(c *gin.Context) {
 		server.Status = "unknown"
 	}
 	h.DB.Create(&server)
-	h.audit("create", "server", server.ID, server.Name, clientIP(c))
+	h.audit("create", "server", server.ID, server.Name, clientIP(c), operatorName(c))
 	c.JSON(http.StatusCreated, server)
 }
 
@@ -378,7 +421,7 @@ func (h *Handler) UpdateServer(c *gin.Context) {
 		return
 	}
 	h.DB.Save(&server)
-	h.audit("update", "server", server.ID, server.Name, clientIP(c))
+	h.audit("update", "server", server.ID, server.Name, clientIP(c), operatorName(c))
 	c.JSON(http.StatusOK, server)
 }
 
@@ -389,7 +432,7 @@ func (h *Handler) DeleteServer(c *gin.Context) {
 		return
 	}
 	h.DB.Delete(&server)
-	h.audit("delete", "server", server.ID, server.Name, clientIP(c))
+	h.audit("delete", "server", server.ID, server.Name, clientIP(c), operatorName(c))
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
@@ -443,7 +486,7 @@ func (h *Handler) CreateRoute(c *gin.Context) {
 		route.Status = "active"
 	}
 	h.DB.Create(&route)
-	h.audit("create", "route", route.ID, route.Name, clientIP(c))
+	h.audit("create", "route", route.ID, route.Name, clientIP(c), operatorName(c))
 	c.JSON(http.StatusCreated, route)
 }
 
@@ -458,7 +501,7 @@ func (h *Handler) UpdateRoute(c *gin.Context) {
 		return
 	}
 	h.DB.Save(&route)
-	h.audit("update", "route", route.ID, route.Name, clientIP(c))
+	h.audit("update", "route", route.ID, route.Name, clientIP(c), operatorName(c))
 	c.JSON(http.StatusOK, route)
 }
 
@@ -469,7 +512,7 @@ func (h *Handler) DeleteRoute(c *gin.Context) {
 		return
 	}
 	h.DB.Delete(&route)
-	h.audit("delete", "route", route.ID, route.Name, clientIP(c))
+	h.audit("delete", "route", route.ID, route.Name, clientIP(c), operatorName(c))
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
@@ -498,7 +541,7 @@ func (h *Handler) CreateNode(c *gin.Context) {
 		return
 	}
 	h.DB.Create(&node)
-	h.audit("create", "node", node.ID, node.Name, clientIP(c))
+	h.audit("create", "node", node.ID, node.Name, clientIP(c), operatorName(c))
 	c.JSON(http.StatusCreated, node)
 }
 
@@ -513,7 +556,7 @@ func (h *Handler) UpdateNode(c *gin.Context) {
 		return
 	}
 	h.DB.Save(&node)
-	h.audit("update", "node", node.ID, node.Name, clientIP(c))
+	h.audit("update", "node", node.ID, node.Name, clientIP(c), operatorName(c))
 	c.JSON(http.StatusOK, node)
 }
 
@@ -524,7 +567,7 @@ func (h *Handler) DeleteNode(c *gin.Context) {
 		return
 	}
 	h.DB.Delete(&node)
-	h.audit("delete", "node", node.ID, node.Name, clientIP(c))
+	h.audit("delete", "node", node.ID, node.Name, clientIP(c), operatorName(c))
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
@@ -538,6 +581,12 @@ func (h *Handler) ListAuditLogs(c *gin.Context) {
 	}
 	if resource := c.Query("resource"); resource != "" {
 		q = q.Where("resource = ?", resource)
+	}
+	if startDate := c.Query("start_date"); startDate != "" {
+		q = q.Where("created_at >= ?", startDate)
+	}
+	if endDate := c.Query("end_date"); endDate != "" {
+		q = q.Where("created_at < ?", endDate+" 23:59:59")
 	}
 	var total int64
 	q.Count(&total)
@@ -575,7 +624,7 @@ func (h *Handler) CreateToken(c *gin.Context) {
 	}
 	token := models.APIToken{Name: body.Name, Token: rawToken}
 	h.DB.Create(&token)
-	h.audit("create", "api_token", token.ID, body.Name, clientIP(c))
+	h.audit("create", "api_token", token.ID, body.Name, clientIP(c), operatorName(c))
 	// Return full token once
 	c.JSON(http.StatusCreated, token)
 }
@@ -587,7 +636,7 @@ func (h *Handler) DeleteToken(c *gin.Context) {
 		return
 	}
 	h.DB.Delete(&token)
-	h.audit("delete", "api_token", token.ID, token.Name, clientIP(c))
+	h.audit("delete", "api_token", token.ID, token.Name, clientIP(c), operatorName(c))
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
@@ -608,31 +657,37 @@ func generateAPIToken() (string, error) {
 
 func (h *Handler) GetSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"port":              h.Cfg.Port,
-		"base_path":         h.Cfg.BasePath,
-		"domain":            h.Cfg.Domain,
-		"notify_days":       h.Cfg.NotifyDays,
-		"ping_interval":     h.Cfg.PingInterval,
-		"gmail_from":        h.Cfg.Gmail.FromEmail,
-		"gmail_admin":       h.Cfg.Gmail.AdminEmail,
-		"gmail_admin_email": h.Cfg.Gmail.AdminEmail,
-		"gmail_client_id":   h.Cfg.Gmail.ClientID,
-		"gmail_oauth_ok":    h.Cfg.Gmail.RefreshToken != "",
-		"gmail_configured":  h.Cfg.Gmail.RefreshToken != "",
+		"port":                h.Cfg.Port,
+		"base_path":           h.Cfg.BasePath,
+		"domain":              h.Cfg.Domain,
+		"notify_days":         h.Cfg.NotifyDays,
+		"ping_interval":       h.Cfg.PingInterval,
+		"gmail_from":          h.Cfg.Gmail.FromEmail,
+		"gmail_admin":         h.Cfg.Gmail.AdminEmail,
+		"gmail_admin_email":   h.Cfg.Gmail.AdminEmail,
+		"gmail_client_id":     h.Cfg.Gmail.ClientID,
+		"gmail_oauth_ok":      h.Cfg.Gmail.RefreshToken != "",
+		"gmail_configured":    h.Cfg.Gmail.RefreshToken != "",
+		"telegram_bot_token":  h.Cfg.Telegram.BotToken,
+		"telegram_chat_id":    h.Cfg.Telegram.ChatID,
+		"telegram_configured": h.Telegram != nil && h.Telegram.IsConfigured(),
 	})
 }
 
 func (h *Handler) UpdateSettings(c *gin.Context) {
 	var body struct {
-		Domain            string              `json:"domain"`
-		NotifyDays        []int               `json:"notify_days"`
-		PingInterval      int                 `json:"ping_interval"`
-		GmailClientID     string              `json:"gmail_client_id"`
-		GmailClientSecret string              `json:"gmail_client_secret"`
-		GmailFrom         string              `json:"gmail_from"`
-		GmailAdmin        string              `json:"gmail_admin"`
-		GmailAdminEmail   string              `json:"gmail_admin_email"`
-		Gmail             *config.GmailConfig `json:"gmail"`
+		Domain            string                 `json:"domain"`
+		NotifyDays        []int                  `json:"notify_days"`
+		PingInterval      int                    `json:"ping_interval"`
+		GmailClientID     string                 `json:"gmail_client_id"`
+		GmailClientSecret string                 `json:"gmail_client_secret"`
+		GmailFrom         string                 `json:"gmail_from"`
+		GmailAdmin        string                 `json:"gmail_admin"`
+		GmailAdminEmail   string                 `json:"gmail_admin_email"`
+		Gmail             *config.GmailConfig    `json:"gmail"`
+		TelegramBotToken  string                 `json:"telegram_bot_token"`
+		TelegramChatID    string                 `json:"telegram_chat_id"`
+		Telegram          *config.TelegramConfig `json:"telegram"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -676,12 +731,54 @@ func (h *Handler) UpdateSettings(c *gin.Context) {
 	if body.GmailAdminEmail != "" {
 		h.Cfg.Gmail.AdminEmail = body.GmailAdminEmail
 	}
+	if body.Telegram != nil {
+		if strings.TrimSpace(body.Telegram.BotToken) != "" {
+			h.Cfg.Telegram.BotToken = strings.TrimSpace(body.Telegram.BotToken)
+		}
+		if strings.TrimSpace(body.Telegram.ChatID) != "" {
+			h.Cfg.Telegram.ChatID = strings.TrimSpace(body.Telegram.ChatID)
+		}
+	}
+	if strings.TrimSpace(body.TelegramBotToken) != "" {
+		h.Cfg.Telegram.BotToken = strings.TrimSpace(body.TelegramBotToken)
+	}
+	if strings.TrimSpace(body.TelegramChatID) != "" {
+		h.Cfg.Telegram.ChatID = strings.TrimSpace(body.TelegramChatID)
+	}
 	if err := config.Save(h.CfgPath, h.Cfg); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save config"})
 		return
 	}
-	h.audit("update", "settings", 0, "settings updated", clientIP(c))
+	h.audit("update", "settings", 0, "settings updated", clientIP(c), operatorName(c))
 	c.JSON(http.StatusOK, gin.H{"message": "saved"})
+}
+
+func (h *Handler) TestGmailSend(c *gin.Context) {
+	var body struct {
+		To string `json:"to"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	to := strings.TrimSpace(body.To)
+	if to == "" {
+		to = strings.TrimSpace(h.Cfg.Gmail.AdminEmail)
+	}
+	if to == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "recipient email required"})
+		return
+	}
+	if h.Notifier == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "gmail notifier unavailable"})
+		return
+	}
+	if err := h.Notifier.SendEmail(to, "[Board] Test Email", "This is a test email from Board."); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	h.audit("test_send", "gmail", 0, to, clientIP(c), operatorName(c))
+	c.JSON(http.StatusOK, gin.H{"message": "sent"})
 }
 
 func (h *Handler) GmailAuthURL(c *gin.Context) {
@@ -715,6 +812,19 @@ func (h *Handler) GmailCallback(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "gmail configured", "email": email})
+}
+
+func (h *Handler) TestTelegramSend(c *gin.Context) {
+	if h.Telegram == nil || !h.Telegram.IsConfigured() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "telegram not configured"})
+		return
+	}
+	if err := h.Telegram.SendMessage("✅ Board TG 测试消息"); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	h.audit("test_send", "telegram", 0, h.Cfg.Telegram.ChatID, clientIP(c), operatorName(c))
+	c.JSON(http.StatusOK, gin.H{"message": "sent"})
 }
 
 // ---------- System ----------

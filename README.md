@@ -32,6 +32,8 @@ Board 是一个轻量级的直播客户管理后台，基于 Go 单二进制 + S
 bash <(curl -Ls https://raw.githubusercontent.com/ctsunny/board/main/install.sh)
 ```
 
+安装菜单会自动显示当前服务器已安装版本和 GitHub 最新版本。执行安装时，可按提示选择是否启用域名 HTTPS 自动申请/续期证书（基于 Let's Encrypt，需提前将域名解析到服务器并放通 80/443 端口）。
+
 安装完成后将显示：
 
 ```

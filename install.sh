@@ -16,6 +16,7 @@ DATA_DIR="/var/lib/board"
 SERVICE_NAME="board"
 BINARY_NAME="board"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+VERSION_FILE="${DATA_DIR}/installed_version"
 
 print_info()    { echo -e "${GREEN}[INFO]${NC} $1"; }
 print_warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
@@ -96,6 +97,28 @@ get_latest_version() {
     print_info "Latest version: ${LATEST_VERSION}"
 }
 
+get_latest_version_quiet() {
+    LATEST_VERSION=$(curl -fsSL --max-time 10 "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" 2>/dev/null \
+        | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' || true)
+}
+
+get_installed_version() {
+    INSTALLED_VERSION="未安装"
+
+    if [[ -x "${INSTALL_DIR}/${BINARY_NAME}" ]]; then
+        local version_output
+        version_output=$("${INSTALL_DIR}/${BINARY_NAME}" --version 2>/dev/null || true)
+        if [[ -n "${version_output}" ]]; then
+            INSTALLED_VERSION=$(printf '%s\n' "${version_output}" | head -1)
+            return
+        fi
+    fi
+
+    if [[ -f "${VERSION_FILE}" ]]; then
+        INSTALLED_VERSION=$(head -1 "${VERSION_FILE}")
+    fi
+}
+
 download_binary() {
     local version="${1}"
     local arch="${2}"
@@ -122,6 +145,12 @@ ensure_deps() {
     done
 }
 
+save_installed_version() {
+    local version="${1}"
+    mkdir -p "${DATA_DIR}"
+    printf '%s\n' "${version}" > "${VERSION_FILE}"
+}
+
 read_config_value() {
     local key="${1}"
     local config_file="${CONFIG_DIR}/config.json"
@@ -138,11 +167,12 @@ show_access_info() {
         return
     fi
 
-    local port base_path admin_user admin_pass
+    local port base_path admin_user admin_pass domain
     port=$(read_config_value "port")
     base_path=$(read_config_value "base_path")
     admin_user=$(read_config_value "admin_user")
     admin_pass=$(read_config_value "admin_password")
+    domain=$(read_config_value "domain")
 
     # Get public IP
     local ip
@@ -157,7 +187,12 @@ show_access_info() {
         access_path="${access_path}/"
     fi
 
-    local access_url="http://${ip}:${port}${access_path}"
+    local access_url
+    if [[ -n "${domain}" ]]; then
+        access_url="https://${domain}${access_path}"
+    else
+        access_url="http://${ip}:${port}${access_path}"
+    fi
 
     # Box is 58 display columns wide (56 inner). CJK chars each occupy 2 display
     # columns, so spacing around them is adjusted accordingly.
@@ -191,6 +226,61 @@ EOF
     print_info "Systemd service created at ${SERVICE_FILE}"
 }
 
+escape_sed_replacement() {
+    printf '%s' "${1}" | sed -e 's/[&|]/\\&/g'
+}
+
+update_config_string() {
+    local key="${1}"
+    local value="${2}"
+    local config_file="${CONFIG_DIR}/config.json"
+    local escaped_value
+
+    if [[ ! -f "${config_file}" ]]; then
+        print_error "Config file not found at ${config_file}"
+        return 1
+    fi
+
+    escaped_value=$(escape_sed_replacement "${value}")
+    sed -i -E "s|(\"${key}\"[[:space:]]*:[[:space:]]*\")[^\"]*(\")|\1${escaped_value}\2|" "${config_file}"
+}
+
+configure_tls() {
+    local enable_tls domain cert_dir
+    cert_dir="${DATA_DIR}/certs"
+
+    echo ""
+    read -rp "是否启用 HTTPS 自动申请/续期证书？[y/N]: " enable_tls
+    case "${enable_tls}" in
+        y|Y|yes|YES)
+            while true; do
+                read -rp "请输入已解析到本机的域名: " domain
+                if [[ -n "${domain}" ]]; then
+                    break
+                fi
+                print_warn "域名不能为空。"
+            done
+
+            mkdir -p "${cert_dir}"
+            update_config_string "domain" "${domain}"
+            update_config_string "cert_dir" "${cert_dir}"
+
+            print_warn "请确保域名已解析到本机，并已放通 80/443 端口。"
+            systemctl restart "${SERVICE_NAME}"
+            sleep 2
+
+            if systemctl is-active --quiet "${SERVICE_NAME}"; then
+                print_info "HTTPS 自动证书已启用，程序会自动申请并续期证书。"
+            else
+                print_error "启用 HTTPS 后服务启动失败。请检查日志: journalctl -u ${SERVICE_NAME} -n 50"
+                exit 1
+            fi
+            ;;
+        *)
+            ;;
+    esac
+}
+
 install() {
     check_root
     detect_os
@@ -219,6 +309,8 @@ install() {
 
     if systemctl is-active --quiet "${SERVICE_NAME}"; then
         print_info "Service started successfully."
+        configure_tls
+        save_installed_version "${LATEST_VERSION}"
         show_access_info
     else
         print_error "Service failed to start. Check logs with: journalctl -u ${SERVICE_NAME} -n 50"
@@ -274,6 +366,7 @@ update() {
 
     sleep 2
     if systemctl is-active --quiet "${SERVICE_NAME}"; then
+        save_installed_version "${LATEST_VERSION}"
         print_info "Board updated to ${LATEST_VERSION} and restarted successfully."
     else
         print_error "Service failed to start after update. Check logs: journalctl -u ${SERVICE_NAME} -n 50"
@@ -323,10 +416,19 @@ show_help() {
 }
 
 show_menu() {
+    get_installed_version
+    get_latest_version_quiet
+    if [[ -z "${LATEST_VERSION}" ]]; then
+        LATEST_VERSION="获取失败"
+    fi
+
     echo ""
     print_banner "╔════════════════════════════════════════════════════════╗"
     print_banner "║            Board 管理脚本                             ║"
     print_banner "╠════════════════════════════════════════════════════════╣"
+    printf "  当前已安装版本: ${GREEN}%s${NC}\n" "${INSTALLED_VERSION}"
+    printf "  最新可用版本:   ${GREEN}%s${NC}\n" "${LATEST_VERSION}"
+    print_banner "╟────────────────────────────────────────────────────────╢"
     printf "  ${GREEN}1)${NC} 安装 Board\n"
     printf "  ${GREEN}2)${NC} 更新 Board\n"
     printf "  ${GREEN}3)${NC} 卸载 Board\n"

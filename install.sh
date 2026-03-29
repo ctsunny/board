@@ -152,13 +152,15 @@ show_access_info() {
 
     local access_url="http://${ip}:${port}${base_path}"
 
-    print_banner "╔══════════════════════════════════════════════╗"
-    print_banner "║        Board 安装完成！                       ║"
-    print_banner "╠══════════════════════════════════════════════╣"
-    printf "${BLUE}║${NC}  访问地址: %-34s${BLUE}║${NC}\n" "${access_url}"
-    printf "${BLUE}║${NC}  用户名:   %-34s${BLUE}║${NC}\n" "${admin_user}"
-    printf "${BLUE}║${NC}  密  码:   %-34s${BLUE}║${NC}\n" "${admin_pass}"
-    print_banner "╚══════════════════════════════════════════════╝"
+    # Box is 58 display columns wide (56 inner). CJK chars each occupy 2 display
+    # columns, so spacing around them is adjusted accordingly.
+    print_banner "╔════════════════════════════════════════════════════════╗"
+    print_banner "║  Board 安装完成！                                      ║"
+    print_banner "╠════════════════════════════════════════════════════════╣"
+    printf "${BLUE}║${NC}  访问地址: %-44s${BLUE}║${NC}\n" "${access_url}"
+    printf "${BLUE}║${NC}  用户名:   %-44s${BLUE}║${NC}\n" "${admin_user}"
+    printf "${BLUE}║${NC}  密  码:   %-44s${BLUE}║${NC}\n" "${admin_pass}"
+    print_banner "╚════════════════════════════════════════════════════════╝"
 }
 
 create_service() {

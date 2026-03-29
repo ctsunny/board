@@ -3,6 +3,7 @@ package router
 import (
 	"io/fs"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/ctsunny/board/internal/api"
@@ -14,10 +15,7 @@ import (
 
 // Setup registers all routes on the engine.
 func Setup(r *gin.Engine, h *api.Handler, cfg *config.Config, database *gorm.DB, staticFiles fs.FS) {
-	base := cfg.BasePath
-	if base == "" {
-		base = ""
-	}
+	base := normalizeBasePath(cfg.BasePath)
 
 	auth := middleware.CombinedAuth(cfg.JWTSecret, database)
 
@@ -91,7 +89,7 @@ func Setup(r *gin.Engine, h *api.Handler, cfg *config.Config, database *gorm.DB,
 		// Pre-load and patch index.html with runtime config injection
 		indexData, _ := fs.ReadFile(staticFiles, "index.html")
 		if indexData != nil {
-			inject := `<script>window.__BOARD_BASE__="` + base + `";</script>`
+			inject := `<script>window.__BOARD_BASE__=` + strconv.Quote(base) + `;</script>`
 			indexData = []byte(strings.Replace(string(indexData), "<head>", "<head>"+inject, 1))
 		}
 
@@ -130,4 +128,15 @@ func Setup(r *gin.Engine, h *api.Handler, cfg *config.Config, database *gorm.DB,
 			c.Data(http.StatusOK, "text/html; charset=utf-8", indexData)
 		})
 	}
+}
+
+func normalizeBasePath(base string) string {
+	base = strings.TrimSpace(base)
+	if base == "" || base == "/" {
+		return ""
+	}
+	if !strings.HasPrefix(base, "/") {
+		base = "/" + base
+	}
+	return strings.TrimRight(base, "/")
 }

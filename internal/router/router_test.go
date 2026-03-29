@@ -70,3 +70,34 @@ func TestStaticAssetsAndIndexUseBasePath(t *testing.T) {
 		t.Fatalf("expected asset body to be served, got %q", body)
 	}
 }
+
+func TestSetupNormalizesConfiguredBasePath(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	engine := gin.New()
+	staticFiles := fstest.MapFS{
+		"index.html":    {Data: []byte("<html><head></head><body>ok</body></html>")},
+		"assets/app.js": {Data: []byte("console.log('ok')")},
+	}
+
+	Setup(engine, &api.Handler{}, &config.Config{BasePath: "mgmt-test/"}, nil, fs.FS(staticFiles))
+
+	indexReq := httptest.NewRequest(http.MethodGet, "/mgmt-test/", nil)
+	indexRec := httptest.NewRecorder()
+	engine.ServeHTTP(indexRec, indexReq)
+
+	if indexRec.Code != http.StatusOK {
+		t.Fatalf("expected %d for normalized index path, got %d", http.StatusOK, indexRec.Code)
+	}
+	if body := indexRec.Body.String(); !strings.Contains(body, `window.__BOARD_BASE__="/mgmt-test"`) {
+		t.Fatalf("expected normalized injected base path in index response, got %q", body)
+	}
+
+	assetReq := httptest.NewRequest(http.MethodGet, "/mgmt-test/assets/app.js", nil)
+	assetRec := httptest.NewRecorder()
+	engine.ServeHTTP(assetRec, assetReq)
+
+	if assetRec.Code != http.StatusOK {
+		t.Fatalf("expected %d for normalized asset path, got %d", http.StatusOK, assetRec.Code)
+	}
+}

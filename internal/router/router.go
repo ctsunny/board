@@ -16,7 +16,7 @@ import (
 func Setup(r *gin.Engine, h *api.Handler, cfg *config.Config, database *gorm.DB, staticFiles fs.FS) {
 	base := cfg.BasePath
 	if base == "" {
-		base = "/"
+		base = ""
 	}
 
 	auth := middleware.CombinedAuth(cfg.JWTSecret, database)
@@ -88,23 +88,31 @@ func Setup(r *gin.Engine, h *api.Handler, cfg *config.Config, database *gorm.DB,
 
 	// Serve Vue SPA
 	if staticFiles != nil {
+		// Pre-load and patch index.html with runtime config injection
+		indexData, _ := fs.ReadFile(staticFiles, "index.html")
+		if indexData != nil {
+			inject := `<script>window.__BOARD_BASE__="` + base + `";</script>`
+			indexData = []byte(strings.Replace(string(indexData), "<head>", "<head>"+inject, 1))
+		}
+
 		fileServer := http.FileServer(http.FS(staticFiles))
 		r.NoRoute(func(c *gin.Context) {
-			path := c.Request.URL.Path
+			urlPath := c.Request.URL.Path
 			// API routes that are not found should return 404 JSON
-			if strings.HasPrefix(path, base+"/api/") {
+			if strings.HasPrefix(urlPath, base+"/api/") {
 				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 				return
 			}
-			// Try to serve static file; on failure fall back to index.html (SPA)
-			_, err := staticFiles.Open(strings.TrimPrefix(path, "/"))
-			if err == nil {
-				fileServer.ServeHTTP(c.Writer, c.Request)
-				return
+			// Try to serve static asset file; on failure fall back to index.html (SPA)
+			trimmed := strings.TrimPrefix(urlPath, "/")
+			if trimmed != "" && trimmed != "index.html" {
+				if _, err := staticFiles.Open(trimmed); err == nil {
+					fileServer.ServeHTTP(c.Writer, c.Request)
+					return
+				}
 			}
-			// SPA fallback: serve index.html
-			indexData, err := fs.ReadFile(staticFiles, "index.html")
-			if err != nil {
+			// SPA fallback: serve patched index.html
+			if indexData == nil {
 				c.Status(http.StatusNotFound)
 				return
 			}

@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"net/http"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -696,7 +697,15 @@ func (h *Handler) SystemVersion(c *gin.Context) {
 }
 
 func (h *Handler) SystemUpdate(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "update triggered (not implemented in this build)"})
+	// Run install.sh update in background; the service will restart automatically
+	cmd := exec.Command("bash", "-c", "bash <(curl -fsSL https://raw.githubusercontent.com/ctsunny/board/main/install.sh) update")
+	if err := cmd.Start(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to trigger update: " + err.Error()})
+		return
+	}
+	// Detach from process; systemd will restart the service
+	cmd.Process.Release()
+	c.JSON(http.StatusOK, gin.H{"message": "update triggered, service will restart shortly"})
 }
 
 // Version is set at build time via ldflags.

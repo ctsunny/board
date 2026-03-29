@@ -1,7 +1,10 @@
 import axios, { type AxiosResponse } from 'axios'
 import { useAuthStore } from '@/stores/auth'
 
-const baseURL = '/api/v1'
+// Runtime base path injected by server into index.html as window.__BOARD_BASE__
+// Falls back to '' (same origin, no prefix) for development
+const boardBase = (window as any).__BOARD_BASE__ ?? ''
+const baseURL = boardBase + '/api/v1'
 
 export const http = axios.create({
   baseURL,

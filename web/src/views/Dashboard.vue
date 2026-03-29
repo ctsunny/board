@@ -70,7 +70,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { dashboardApi, serversApi, auditLogsApi } from '@/api'
+import { dashboardApi, serversApi, auditLogsApi, customersApi } from '@/api'
 import { formatDate } from '@/utils'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
@@ -87,6 +87,7 @@ interface ServerItem {
 const stats = reactive<Record<string, number>>({})
 const servers = ref<ServerItem[]>([])
 const auditLogs = ref<Record<string, unknown>[]>([])
+const recentCustomers = ref<Record<string, unknown>[]>([])
 
 const statCards = [
   { key: 'total_customers',   label: '总客户数',   color: '#409eff' },
@@ -132,6 +133,17 @@ const chartOption = ref({
   ],
 })
 
+function getList(data: unknown): Record<string, unknown>[] {
+  if (Array.isArray(data)) return data as Record<string, unknown>[]
+  if (data && typeof data === 'object') {
+    const page = data as { data?: unknown[]; list?: unknown[]; items?: unknown[] }
+    if (Array.isArray(page.data)) return page.data as Record<string, unknown>[]
+    if (Array.isArray(page.list)) return page.list as Record<string, unknown>[]
+    if (Array.isArray(page.items)) return page.items as Record<string, unknown>[]
+  }
+  return []
+}
+
 async function loadData() {
   try {
     const res = await dashboardApi.getDashboard()
@@ -147,18 +159,23 @@ async function loadData() {
 
   try {
     const sRes = await serversApi.list()
-    const sData = sRes.data as { list?: unknown[]; items?: unknown[] } | unknown[]
-    servers.value = (Array.isArray(sData) ? sData : (sData as { list?: ServerItem[]; items?: ServerItem[] }).list ?? []) as ServerItem[]
+    servers.value = getList(sRes.data) as ServerItem[]
   } catch {
     servers.value = []
   }
 
   try {
     const lRes = await auditLogsApi.list({ page: 1, page_size: 10 })
-    const lData = lRes.data as { list?: unknown[]; items?: unknown[] } | unknown[]
-    auditLogs.value = (Array.isArray(lData) ? lData : (lData as { list?: unknown[]; items?: unknown[] }).list ?? []) as Record<string, unknown>[]
+    auditLogs.value = getList(lRes.data)
   } catch {
     auditLogs.value = []
+  }
+
+  try {
+    const cRes = await customersApi.list({ page: 1, per_page: 8 })
+    recentCustomers.value = getList(cRes.data)
+  } catch {
+    recentCustomers.value = []
   }
 }
 

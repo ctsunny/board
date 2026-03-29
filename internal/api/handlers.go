@@ -274,8 +274,7 @@ func (h *Handler) ExportCustomers(c *gin.Context) {
 	c.Header("Content-Disposition", "attachment; filename=customers.csv")
 
 	w := csv.NewWriter(c.Writer)
-	// UTF-8 BOM
-	c.Writer.Write([]byte{0xEF, 0xBB, 0xBF})
+	c.Writer.Write([]byte{0xEF, 0xBB, 0xBF}) // UTF-8 BOM for Excel compatibility
 	w.Write([]string{"ID", "Name", "Contact", "ExpiresAt", "Amount", "BillingType", "TrafficGB", "UsedGB", "Tags", "Status", "Remark", "CreatedAt"})
 	for _, cust := range customers {
 		w.Write([]string{

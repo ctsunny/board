@@ -216,7 +216,8 @@ func ExchangeCode(clientID, clientSecret, code string) (refreshToken string, ema
 	return token.RefreshToken, email, nil
 }
 
-// fetchUserEmail via tokeninfo endpoint.
+// fetchUserEmail is a fallback to retrieve the user's email via the tokeninfo endpoint.
+// It is used when the id_token-based extraction in ExchangeCode fails.
 func fetchUserEmail(accessToken string) string {
 	resp, err := http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + url.QueryEscape(accessToken))
 	if err != nil {

@@ -88,6 +88,7 @@ func Setup(r *gin.Engine, h *api.Handler, cfg *config.Config, database *gorm.DB,
 
 	// Serve Vue SPA
 	if staticFiles != nil {
+		fileServer := http.FileServer(http.FS(staticFiles))
 		r.NoRoute(func(c *gin.Context) {
 			path := c.Request.URL.Path
 			// API routes that are not found should return 404 JSON
@@ -95,11 +96,10 @@ func Setup(r *gin.Engine, h *api.Handler, cfg *config.Config, database *gorm.DB,
 				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 				return
 			}
-			// Try to serve the file directly
-			f, err := staticFiles.Open(strings.TrimPrefix(path, "/"))
+			// Try to serve static file; on failure fall back to index.html (SPA)
+			_, err := staticFiles.Open(strings.TrimPrefix(path, "/"))
 			if err == nil {
-				f.Close()
-				http.FileServer(http.FS(staticFiles)).ServeHTTP(c.Writer, c.Request)
+				fileServer.ServeHTTP(c.Writer, c.Request)
 				return
 			}
 			// SPA fallback: serve index.html

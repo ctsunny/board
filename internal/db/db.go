@@ -19,6 +19,7 @@ func Init(dsn string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	// SQLite requires a single writer to prevent "database is locked" errors.
 	sqlDB.SetMaxOpenConns(1)
 
 	if err := database.AutoMigrate(

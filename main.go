@@ -26,7 +26,13 @@ var webDist embed.FS
 
 func main() {
 	cfgPath := flag.String("config", "/etc/board/config.json", "path to config file")
+	showVersion := flag.Bool("version", false, "print version")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(api.Version)
+		return
+	}
 
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {

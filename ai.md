@@ -22,3 +22,16 @@
 **遗留/风险**：统一页逻辑较集中，后续若继续扩展可再拆分可复用子组件；前端构建后需同步更新 `web/dist`。
 
 **涉及文件**：`ai.md` `web/src/views/LiveResources.vue` `web/src/router/index.ts` `web/src/components/Layout.vue`
+
+---
+### [2026-03-29] Gmail配置修复
+
+**目的**：修复 Gmail 通知提醒在系统设置中保存配置失败、状态回显异常的问题。
+
+**思路**：延续前后端最小改动原则，不改设置页交互，改后端同时兼容前端已发送的平铺字段，并补齐读取接口返回字段。
+
+**关键技术**：`UpdateSettings` 同时支持 `gmail_client_id` 等平铺字段与 `gmail` 嵌套对象；`GetSettings` 增补 `gmail_client_id`、`gmail_admin_email`、`gmail_configured` 供前端直接回显。
+
+**遗留/风险**：当前“已配置”仍主要表示 OAuth 已完成；若后续想区分“已保存凭据”和“已完成授权”，需再拆分状态字段。
+
+**涉及文件**：`ai.md` `internal/api/handlers.go` `internal/api/handlers_settings_test.go`

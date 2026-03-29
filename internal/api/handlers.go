@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/ctsunny/board/internal/config"
 	"github.com/ctsunny/board/internal/middleware"
 	"github.com/ctsunny/board/internal/models"
 	"github.com/ctsunny/board/internal/services"
+	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -608,23 +608,31 @@ func generateAPIToken() (string, error) {
 
 func (h *Handler) GetSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"port":           h.Cfg.Port,
-		"base_path":      h.Cfg.BasePath,
-		"domain":         h.Cfg.Domain,
-		"notify_days":    h.Cfg.NotifyDays,
-		"ping_interval":  h.Cfg.PingInterval,
-		"gmail_from":     h.Cfg.Gmail.FromEmail,
-		"gmail_admin":    h.Cfg.Gmail.AdminEmail,
-		"gmail_oauth_ok": h.Cfg.Gmail.RefreshToken != "",
+		"port":              h.Cfg.Port,
+		"base_path":         h.Cfg.BasePath,
+		"domain":            h.Cfg.Domain,
+		"notify_days":       h.Cfg.NotifyDays,
+		"ping_interval":     h.Cfg.PingInterval,
+		"gmail_from":        h.Cfg.Gmail.FromEmail,
+		"gmail_admin":       h.Cfg.Gmail.AdminEmail,
+		"gmail_admin_email": h.Cfg.Gmail.AdminEmail,
+		"gmail_client_id":   h.Cfg.Gmail.ClientID,
+		"gmail_oauth_ok":    h.Cfg.Gmail.RefreshToken != "",
+		"gmail_configured":  h.Cfg.Gmail.RefreshToken != "",
 	})
 }
 
 func (h *Handler) UpdateSettings(c *gin.Context) {
 	var body struct {
-		Domain       string      `json:"domain"`
-		NotifyDays   []int       `json:"notify_days"`
-		PingInterval int         `json:"ping_interval"`
-		Gmail        *config.GmailConfig `json:"gmail"`
+		Domain            string              `json:"domain"`
+		NotifyDays        []int               `json:"notify_days"`
+		PingInterval      int                 `json:"ping_interval"`
+		GmailClientID     string              `json:"gmail_client_id"`
+		GmailClientSecret string              `json:"gmail_client_secret"`
+		GmailFrom         string              `json:"gmail_from"`
+		GmailAdmin        string              `json:"gmail_admin"`
+		GmailAdminEmail   string              `json:"gmail_admin_email"`
+		Gmail             *config.GmailConfig `json:"gmail"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -652,6 +660,21 @@ func (h *Handler) UpdateSettings(c *gin.Context) {
 		if body.Gmail.AdminEmail != "" {
 			h.Cfg.Gmail.AdminEmail = body.Gmail.AdminEmail
 		}
+	}
+	if body.GmailClientID != "" {
+		h.Cfg.Gmail.ClientID = body.GmailClientID
+	}
+	if body.GmailClientSecret != "" {
+		h.Cfg.Gmail.ClientSecret = body.GmailClientSecret
+	}
+	if body.GmailFrom != "" {
+		h.Cfg.Gmail.FromEmail = body.GmailFrom
+	}
+	if body.GmailAdmin != "" {
+		h.Cfg.Gmail.AdminEmail = body.GmailAdmin
+	}
+	if body.GmailAdminEmail != "" {
+		h.Cfg.Gmail.AdminEmail = body.GmailAdminEmail
 	}
 	if err := config.Save(h.CfgPath, h.Cfg); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save config"})

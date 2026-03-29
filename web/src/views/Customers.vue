@@ -66,9 +66,45 @@
         <el-table-column prop="name" label="姓名" min-width="110" show-overflow-tooltip />
         <el-table-column prop="contact" label="联系方式" min-width="120" show-overflow-tooltip />
         <el-table-column prop="region_name" label="地区" min-width="110" show-overflow-tooltip />
-        <el-table-column prop="route_name" label="线路" min-width="110" show-overflow-tooltip />
-        <el-table-column prop="server_name" label="服务器" min-width="110" show-overflow-tooltip />
-        <el-table-column prop="node_name" label="节点" min-width="110" show-overflow-tooltip />
+        <el-table-column label="线路" min-width="150">
+          <template #default="{ row }">
+            <template v-if="splitMultiValue(row.route_name).length">
+              <el-tag
+                v-for="route in splitMultiValue(row.route_name)"
+                :key="route"
+                size="small"
+                style="margin-right:4px"
+              >{{ route }}</el-tag>
+            </template>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="服务器" min-width="150">
+          <template #default="{ row }">
+            <template v-if="splitMultiValue(row.server_name).length">
+              <el-tag
+                v-for="server in splitMultiValue(row.server_name)"
+                :key="server"
+                size="small"
+                style="margin-right:4px"
+              >{{ server }}</el-tag>
+            </template>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="节点" min-width="150">
+          <template #default="{ row }">
+            <template v-if="splitMultiValue(row.node_name).length">
+              <el-tag
+                v-for="node in splitMultiValue(row.node_name)"
+                :key="node"
+                size="small"
+                style="margin-right:4px"
+              >{{ node }}</el-tag>
+            </template>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
             <StatusBadge :status="row.status || 'unknown'" />

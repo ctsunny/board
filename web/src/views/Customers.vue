@@ -65,6 +65,10 @@
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="name" label="姓名" min-width="110" show-overflow-tooltip />
         <el-table-column prop="contact" label="联系方式" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="region_name" label="地区" min-width="110" show-overflow-tooltip />
+        <el-table-column prop="route_name" label="线路" min-width="110" show-overflow-tooltip />
+        <el-table-column prop="server_name" label="服务器" min-width="110" show-overflow-tooltip />
+        <el-table-column prop="node_name" label="节点" min-width="110" show-overflow-tooltip />
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
             <StatusBadge :status="row.status || 'unknown'" />
@@ -167,6 +171,86 @@
               />
             </el-form-item>
           </el-col>
+          <el-col :span="12">
+            <el-form-item label="地区">
+              <el-select
+                v-model="form.region_name"
+                clearable
+                filterable
+                allow-create
+                default-first-option
+                placeholder="可选下拉或自定义"
+                style="width:100%"
+              >
+                <el-option
+                  v-for="region in regions"
+                  :key="region.id as number"
+                  :label="region.name as string"
+                  :value="region.name as string"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="线路">
+              <el-select
+                v-model="form.route_name"
+                clearable
+                filterable
+                allow-create
+                default-first-option
+                placeholder="可选下拉或自定义"
+                style="width:100%"
+              >
+                <el-option
+                  v-for="route in routes"
+                  :key="route.id as number"
+                  :label="route.name as string"
+                  :value="route.name as string"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="服务器">
+              <el-select
+                v-model="form.server_name"
+                clearable
+                filterable
+                allow-create
+                default-first-option
+                placeholder="可选下拉或自定义"
+                style="width:100%"
+              >
+                <el-option
+                  v-for="server in servers"
+                  :key="server.id as number"
+                  :label="server.name as string"
+                  :value="server.name as string"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="节点">
+              <el-select
+                v-model="form.node_name"
+                clearable
+                filterable
+                allow-create
+                default-first-option
+                placeholder="可选下拉或自定义"
+                style="width:100%"
+              >
+                <el-option
+                  v-for="node in nodes"
+                  :key="node.id as number"
+                  :label="node.name as string"
+                  :value="node.name as string"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
           <el-col :span="24">
             <el-form-item label="备注">
               <el-input v-model="form.remark" type="textarea" :rows="2" />
@@ -204,8 +288,9 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete, Refresh, Download } from '@element-plus/icons-vue'
-import { customersApi } from '@/api'
-import { formatDate, formatBytes, formatMoney, isExpired, isExpiringSoon, downloadBlob } from '@/utils'
+import dayjs from 'dayjs'
+import { customersApi, regionsApi, routesApi, serversApi, nodesApi } from '@/api'
+import { formatDate, formatBytes, formatMoney, isExpired, isExpiringSoon, downloadBlob, getListData } from '@/utils'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -213,6 +298,10 @@ import type { FormInstance, FormRules } from 'element-plus'
 const loading = ref(false)
 const saving = ref(false)
 const list = ref<Record<string, unknown>[]>([])
+const regions = ref<Record<string, unknown>[]>([])
+const routes = ref<Record<string, unknown>[]>([])
+const servers = ref<Record<string, unknown>[]>([])
+const nodes = ref<Record<string, unknown>[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
@@ -238,6 +327,10 @@ const form = reactive({
   billing_type: 'monthly',
   amount: 0,
   expires_at: '',
+  region_name: '',
+  route_name: '',
+  server_name: '',
+  node_name: '',
   remark: '',
   tags: '',
 })
@@ -260,6 +353,58 @@ function expiryClass(date: unknown) {
   return ''
 }
 
+function formatDateForForm(date: unknown): string {
+  if (!date) return ''
+  return formatDate(date as string, 'YYYY-MM-DD')
+}
+
+function trimText(value: unknown): string {
+  return String(value ?? '').trim()
+}
+
+function buildPayload() {
+  const payload: Record<string, unknown> = {
+    name: trimText(form.name),
+    contact: trimText(form.contact),
+    status: form.status,
+    billing_type: form.billing_type,
+    amount: form.amount,
+    region_name: trimText(form.region_name),
+    route_name: trimText(form.route_name),
+    server_name: trimText(form.server_name),
+    node_name: trimText(form.node_name),
+    remark: trimText(form.remark),
+    tags: trimText(form.tags),
+  }
+  if (form.expires_at) {
+    payload.expires_at = dayjs(form.expires_at).startOf('day').format('YYYY-MM-DDTHH:mm:ssZ')
+  }
+  return payload
+}
+
+async function loadPagedOptions(apiList: (params?: Record<string, unknown>) => Promise<{ data: unknown }>) {
+  const perPage = 200
+  const firstRes = await apiList({ page: 1, per_page: perPage })
+  const firstData = firstRes.data
+  const firstList = getListData(firstData)
+  if (!firstData || Array.isArray(firstData) || typeof firstData !== 'object') {
+    return firstList
+  }
+
+  const total = Number((firstData as { total?: number }).total ?? firstList.length)
+  if (!Number.isFinite(total) || total <= firstList.length) {
+    return firstList
+  }
+
+  const pages = Math.ceil(total / perPage)
+  const rest = await Promise.allSettled(
+    Array.from({ length: pages - 1 }, (_, index) => apiList({ page: index + 2, per_page: perPage }))
+  )
+  return firstList.concat(
+    rest.flatMap((result) => (result.status === 'fulfilled' ? getListData(result.value.data) : []))
+  )
+}
+
 async function loadData() {
   loading.value = true
   try {
@@ -269,8 +414,8 @@ async function loadData() {
       ...filters,
     }
     const res = await customersApi.list(params)
-    const d = res.data as { list?: unknown[]; total?: number; items?: unknown[] }
-    list.value = (d.list ?? d.items ?? []) as Record<string, unknown>[]
+    const d = res.data as { total?: number }
+    list.value = getListData(d)
     total.value = d.total ?? list.value.length
   } catch {
     list.value = []
@@ -279,9 +424,42 @@ async function loadData() {
   }
 }
 
+async function loadSelects() {
+  try {
+    const [regionRes, routeList, serverRes, nodeList] = await Promise.all([
+      regionsApi.list(),
+      loadPagedOptions(routesApi.list),
+      serversApi.list(),
+      loadPagedOptions(nodesApi.list),
+    ])
+    regions.value = getListData(regionRes.data)
+    routes.value = routeList
+    servers.value = getListData(serverRes.data)
+    nodes.value = nodeList
+  } catch {
+    regions.value = []
+    routes.value = []
+    servers.value = []
+    nodes.value = []
+  }
+}
+
 function openCreate() {
   editRow.value = null
-  Object.assign(form, { name: '', contact: '', status: 'active', billing_type: 'monthly', amount: 0, expires_at: '', remark: '', tags: '' })
+  Object.assign(form, {
+    name: '',
+    contact: '',
+    status: 'active',
+    billing_type: 'monthly',
+    amount: 0,
+    expires_at: '',
+    region_name: '',
+    route_name: '',
+    server_name: '',
+    node_name: '',
+    remark: '',
+    tags: '',
+  })
   dialogVisible.value = true
 }
 
@@ -293,7 +471,11 @@ function openEdit(row: Record<string, unknown>) {
     status: row.status ?? 'active',
     billing_type: row.billing_type ?? 'monthly',
     amount: row.amount ?? 0,
-    expires_at: row.expires_at ?? '',
+    expires_at: formatDateForForm(row.expires_at),
+    region_name: row.region_name ?? '',
+    route_name: row.route_name ?? '',
+    server_name: row.server_name ?? '',
+    node_name: row.node_name ?? '',
     remark: row.remark ?? '',
     tags: Array.isArray(row.tags) ? (row.tags as string[]).join(',') : row.tags ?? '',
   })
@@ -306,17 +488,18 @@ async function handleSave() {
     if (!valid) return
     saving.value = true
     try {
+      const payload = buildPayload()
       if (editRow.value) {
-        await customersApi.update(editRow.value.id as number, { ...form })
+        await customersApi.update(editRow.value.id as number, payload)
       } else {
-        await customersApi.create({ ...form })
+        await customersApi.create(payload)
       }
       ElMessage.success('保存成功')
       dialogVisible.value = false
       loadData()
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { message?: string } } }
-      ElMessage.error(err?.response?.data?.message ?? '保存失败')
+      const err = e as { response?: { data?: { message?: string; error?: string } } }
+      ElMessage.error(err?.response?.data?.message ?? err?.response?.data?.error ?? '保存失败')
     } finally {
       saving.value = false
     }
@@ -370,7 +553,10 @@ async function handleExport() {
   }
 }
 
-onMounted(loadData)
+onMounted(() => {
+  loadData()
+  loadSelects()
+})
 </script>
 
 <style scoped>

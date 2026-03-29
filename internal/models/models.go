@@ -6,6 +6,10 @@ type Customer struct {
 	ID          uint      `gorm:"primarykey" json:"id"`
 	Name        string    `json:"name"`
 	Contact     string    `json:"contact"`
+	RegionName  string    `json:"region_name"`
+	RouteName   string    `json:"route_name"`
+	ServerName  string    `json:"server_name"`
+	NodeName    string    `json:"node_name"`
 	ExpiresAt   time.Time `json:"expires_at"`
 	Amount      float64   `json:"amount"`
 	BillingType string    `json:"billing_type"`

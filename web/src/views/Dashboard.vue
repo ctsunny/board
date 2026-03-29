@@ -52,6 +52,28 @@
       </el-col>
     </el-row>
 
+    <el-card style="margin-top:20px">
+      <template #header><span>客户面板</span></template>
+      <div v-if="recentCustomers.length === 0" class="empty-tip">暂无客户数据</div>
+      <el-table v-else :data="recentCustomers" size="small" style="width:100%">
+        <el-table-column prop="name" label="客户" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="contact" label="联系方式" min-width="140" show-overflow-tooltip />
+        <el-table-column label="资源信息" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ [row.region_name, row.route_name, row.server_name, row.node_name].filter(Boolean).join(' / ') || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <StatusBadge :status="row.status || 'unknown'" />
+          </template>
+        </el-table-column>
+        <el-table-column label="到期日" width="130">
+          <template #default="{ row }">{{ formatDate(row.expires_at, 'YYYY-MM-DD') }}</template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
     <!-- Recent audit logs -->
     <el-card style="margin-top:20px">
       <template #header><span>最近操作日志</span></template>
@@ -70,8 +92,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { dashboardApi, serversApi, auditLogsApi } from '@/api'
-import { formatDate } from '@/utils'
+import { dashboardApi, serversApi, auditLogsApi, customersApi } from '@/api'
+import { formatDate, getListData } from '@/utils'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import dayjs from 'dayjs'
@@ -87,6 +109,7 @@ interface ServerItem {
 const stats = reactive<Record<string, number>>({})
 const servers = ref<ServerItem[]>([])
 const auditLogs = ref<Record<string, unknown>[]>([])
+const recentCustomers = ref<Record<string, unknown>[]>([])
 
 const statCards = [
   { key: 'total_customers',   label: '总客户数',   color: '#409eff' },
@@ -147,18 +170,23 @@ async function loadData() {
 
   try {
     const sRes = await serversApi.list()
-    const sData = sRes.data as { list?: unknown[]; items?: unknown[] } | unknown[]
-    servers.value = (Array.isArray(sData) ? sData : (sData as { list?: ServerItem[]; items?: ServerItem[] }).list ?? []) as ServerItem[]
+    servers.value = getListData(sRes.data) as unknown as ServerItem[]
   } catch {
     servers.value = []
   }
 
   try {
     const lRes = await auditLogsApi.list({ page: 1, page_size: 10 })
-    const lData = lRes.data as { list?: unknown[]; items?: unknown[] } | unknown[]
-    auditLogs.value = (Array.isArray(lData) ? lData : (lData as { list?: unknown[]; items?: unknown[] }).list ?? []) as Record<string, unknown>[]
+    auditLogs.value = getListData(lRes.data)
   } catch {
     auditLogs.value = []
+  }
+
+  try {
+    const cRes = await customersApi.list({ page: 1, per_page: 8 })
+    recentCustomers.value = getListData(cRes.data)
+  } catch {
+    recentCustomers.value = []
   }
 }
 

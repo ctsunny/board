@@ -276,12 +276,16 @@ func (h *Handler) ExportCustomers(c *gin.Context) {
 
 	w := csv.NewWriter(c.Writer)
 	c.Writer.Write([]byte{0xEF, 0xBB, 0xBF}) // UTF-8 BOM for Excel compatibility
-	w.Write([]string{"ID", "Name", "Contact", "ExpiresAt", "Amount", "BillingType", "TrafficGB", "UsedGB", "Tags", "Status", "Remark", "CreatedAt"})
+	w.Write([]string{"ID", "Name", "Contact", "Region", "Route", "Server", "Node", "ExpiresAt", "Amount", "BillingType", "TrafficGB", "UsedGB", "Tags", "Status", "Remark", "CreatedAt"})
 	for _, cust := range customers {
 		w.Write([]string{
 			strconv.Itoa(int(cust.ID)),
 			cust.Name,
 			cust.Contact,
+			cust.RegionName,
+			cust.RouteName,
+			cust.ServerName,
+			cust.NodeName,
 			cust.ExpiresAt.Format("2006-01-02"),
 			strconv.FormatFloat(cust.Amount, 'f', 2, 64),
 			cust.BillingType,

@@ -48,3 +48,14 @@ export function downloadBlob(blob: Blob, filename: string) {
   a.click()
   URL.revokeObjectURL(url)
 }
+
+export function getListData(data: unknown): Record<string, unknown>[] {
+  if (Array.isArray(data)) return data as Record<string, unknown>[]
+  if (data && typeof data === 'object') {
+    const page = data as { data?: unknown[]; list?: unknown[]; items?: unknown[] }
+    if (Array.isArray(page.data)) return page.data as Record<string, unknown>[]
+    if (Array.isArray(page.list)) return page.list as Record<string, unknown>[]
+    if (Array.isArray(page.items)) return page.items as Record<string, unknown>[]
+  }
+  return []
+}

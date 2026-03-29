@@ -8,9 +8,9 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/gin-gonic/gin"
 	"github.com/ctsunny/board/internal/api"
 	"github.com/ctsunny/board/internal/config"
+	"github.com/gin-gonic/gin"
 )
 
 func TestBasePathRedirectsToTrailingSlash(t *testing.T) {
@@ -18,9 +18,9 @@ func TestBasePathRedirectsToTrailingSlash(t *testing.T) {
 
 	engine := gin.New()
 	staticFiles := fstest.MapFS{
-		"index.html":      {Data: []byte("<html><head></head><body>ok</body></html>")},
-		"assets/app.js":   {Data: []byte("console.log('ok')")},
-		"assets/app.css":  {Data: []byte("body{}")},
+		"index.html":     {Data: []byte("<html><head></head><body>ok</body></html>")},
+		"assets/app.js":  {Data: []byte("console.log('ok')")},
+		"assets/app.css": {Data: []byte("body{}")},
 	}
 
 	Setup(engine, &api.Handler{}, &config.Config{BasePath: "/mgmt-test"}, nil, fs.FS(staticFiles))

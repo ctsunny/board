@@ -13,12 +13,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/ctsunny/board/internal/api"
 	"github.com/ctsunny/board/internal/config"
 	dbpkg "github.com/ctsunny/board/internal/db"
 	"github.com/ctsunny/board/internal/router"
 	"github.com/ctsunny/board/internal/services"
+	"github.com/gin-gonic/gin"
 )
 
 //go:embed web/dist

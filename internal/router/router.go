@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"github.com/ctsunny/board/internal/api"
 	"github.com/ctsunny/board/internal/config"
 	"github.com/ctsunny/board/internal/middleware"
+	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 

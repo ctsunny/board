@@ -21,17 +21,18 @@ type GmailConfig struct {
 }
 
 type Config struct {
-	Port         int         `json:"port"`
-	BasePath     string      `json:"base_path"`
-	AdminUser    string      `json:"admin_user"`
-	AdminPass    string      `json:"admin_pass"`
-	JWTSecret    string      `json:"jwt_secret"`
-	DBPath       string      `json:"db_path"`
-	Domain       string      `json:"domain"`
-	CertDir      string      `json:"cert_dir"`
-	Gmail        GmailConfig `json:"gmail"`
-	NotifyDays   []int       `json:"notify_days"`
-	PingInterval int         `json:"ping_interval"`
+	Port          int         `json:"port"`
+	BasePath      string      `json:"base_path"`
+	AdminUser     string      `json:"admin_user"`
+	AdminPass     string      `json:"admin_pass"`
+	AdminPassword string      `json:"admin_password"` // plain text, used only for displaying initial credentials; file is 0600 root-only
+	JWTSecret     string      `json:"jwt_secret"`
+	DBPath        string      `json:"db_path"`
+	Domain        string      `json:"domain"`
+	CertDir       string      `json:"cert_dir"`
+	Gmail         GmailConfig `json:"gmail"`
+	NotifyDays    []int       `json:"notify_days"`
+	PingInterval  int         `json:"ping_interval"`
 }
 
 func Load(path string) (*Config, error) {
@@ -79,15 +80,16 @@ func GenerateDefault() (*Config, error) {
 		return nil, err
 	}
 	return &Config{
-		Port:         port,
-		BasePath:     "/mgmt-" + suffix,
-		AdminUser:    "admin",
-		AdminPass:    string(hashed),
-		JWTSecret:    jwtSecret,
-		DBPath:       "/var/lib/board/board.db",
-		CertDir:      "/var/lib/board/certs",
-		NotifyDays:   []int{7, 3, 1},
-		PingInterval: 60,
+		Port:          port,
+		BasePath:      "/mgmt-" + suffix,
+		AdminUser:     "admin",
+		AdminPass:     string(hashed),
+		AdminPassword: adminPass,
+		JWTSecret:     jwtSecret,
+		DBPath:        "/var/lib/board/board.db",
+		CertDir:       "/var/lib/board/certs",
+		NotifyDays:    []int{7, 3, 1},
+		PingInterval:  60,
 	}, nil
 }
 

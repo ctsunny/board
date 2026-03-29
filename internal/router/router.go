@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"github.com/ctsunny/board/internal/api"
 	"github.com/ctsunny/board/internal/config"
 	"github.com/ctsunny/board/internal/middleware"
+	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
@@ -102,6 +102,10 @@ func Setup(r *gin.Engine, h *api.Handler, cfg *config.Config, database *gorm.DB,
 
 		r.NoRoute(func(c *gin.Context) {
 			urlPath := c.Request.URL.Path
+			if base != "" && urlPath == base {
+				c.Redirect(http.StatusPermanentRedirect, base+"/")
+				return
+			}
 			// API routes that are not found should return 404 JSON
 			if strings.HasPrefix(urlPath, base+"/api/") {
 				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})

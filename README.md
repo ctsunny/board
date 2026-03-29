@@ -38,7 +38,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/ctsunny/board/main/install.sh)
 ╔══════════════════════════════════════════════╗
 ║        Board 安装完成！                       ║
 ╠══════════════════════════════════════════════╣
-║  访问地址: http://1.2.3.4:12345/mgmt-xxxxxx  ║
+║  访问地址: http://1.2.3.4:12345/mgmt-xxxxxx/ ║
 ║  用户名:   admin_xxxxxx                       ║
 ║  密  码:   xxxxxxxxxxxx                       ║
 ╚══════════════════════════════════════════════╝

@@ -13,12 +13,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/ctsunny/board/internal/api"
 	"github.com/ctsunny/board/internal/config"
 	dbpkg "github.com/ctsunny/board/internal/db"
 	"github.com/ctsunny/board/internal/router"
 	"github.com/ctsunny/board/internal/services"
+	"github.com/gin-gonic/gin"
 )
 
 //go:embed web/dist
@@ -43,6 +43,15 @@ func main() {
 			}
 		} else {
 			log.Fatalf("load config: %v", err)
+		}
+	}
+	if reason, err := config.EnsureAdminCredentials(cfg); err != nil {
+		log.Fatalf("ensure admin credentials: %v", err)
+	} else if reason != "" {
+		if err := config.Save(*cfgPath, cfg); err != nil {
+			log.Printf("Warning: could not persist updated admin credentials to %s: %v", *cfgPath, err)
+		} else {
+			log.Printf("Config updated at %s: %s", *cfgPath, reason)
 		}
 	}
 

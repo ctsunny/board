@@ -67,15 +67,11 @@ func GenerateDefault() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	adminPass, err := randomHex(8)
-	if err != nil {
-		return nil, err
-	}
 	jwtSecret, err := randomHex(32)
 	if err != nil {
 		return nil, err
 	}
-	hashed, err := bcrypt.GenerateFromPassword([]byte(adminPass), bcrypt.DefaultCost)
+	hashed, adminPass, err := generateAdminCredentials()
 	if err != nil {
 		return nil, err
 	}
@@ -93,6 +89,43 @@ func GenerateDefault() (*Config, error) {
 	}, nil
 }
 
+func EnsureAdminCredentials(cfg *Config) (string, error) {
+	switch {
+	case cfg.AdminPass == "" && cfg.AdminPassword == "":
+		hashed, adminPass, err := generateAdminCredentials()
+		if err != nil {
+			return "", err
+		}
+		cfg.AdminUser = "admin"
+		cfg.AdminPass = hashed
+		cfg.AdminPassword = adminPass
+		return "generated default admin credentials", nil
+	case cfg.AdminPass == "":
+		hashed, err := bcrypt.GenerateFromPassword([]byte(cfg.AdminPassword), bcrypt.DefaultCost)
+		if err != nil {
+			return "", err
+		}
+		if cfg.AdminUser == "" {
+			cfg.AdminUser = "admin"
+		}
+		cfg.AdminPass = string(hashed)
+		return "restored hashed admin password from stored plaintext password", nil
+	case cfg.AdminPassword == "":
+		hashed, adminPass, err := generateAdminCredentials()
+		if err != nil {
+			return "", err
+		}
+		if cfg.AdminUser == "" {
+			cfg.AdminUser = "admin"
+		}
+		cfg.AdminPass = hashed
+		cfg.AdminPassword = adminPass
+		return "rotated admin password because the preserved config no longer had a displayable password", nil
+	default:
+		return "", nil
+	}
+}
+
 func randomPort() (int, error) {
 	n, err := rand.Int(rand.Reader, big.NewInt(55535))
 	if err != nil {
@@ -107,4 +140,16 @@ func randomHex(n int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+func generateAdminCredentials() (string, string, error) {
+	adminPass, err := randomHex(8)
+	if err != nil {
+		return "", "", err
+	}
+	hashed, err := bcrypt.GenerateFromPassword([]byte(adminPass), bcrypt.DefaultCost)
+	if err != nil {
+		return "", "", err
+	}
+	return string(hashed), adminPass, nil
 }

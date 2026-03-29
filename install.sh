@@ -150,7 +150,14 @@ show_access_info() {
          curl -fsSL --max-time 5 https://ifconfig.me 2>/dev/null || \
          hostname -I | awk '{print $1}')
 
-    local access_url="http://${ip}:${port}${base_path}"
+    local access_path="${base_path}"
+    if [[ -z "${access_path}" ]]; then
+        access_path="/"
+    elif [[ "${access_path}" != */ ]]; then
+        access_path="${access_path}/"
+    fi
+
+    local access_url="http://${ip}:${port}${access_path}"
 
     # Box is 58 display columns wide (56 inner). CJK chars each occupy 2 display
     # columns, so spacing around them is adjusted accordingly.

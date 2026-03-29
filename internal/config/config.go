@@ -20,6 +20,11 @@ type GmailConfig struct {
 	AdminEmail   string `json:"admin_email"`
 }
 
+type TelegramConfig struct {
+	BotToken string `json:"bot_token"`
+	ChatID   string `json:"chat_id"`
+}
+
 type Config struct {
 	Port          int         `json:"port"`
 	BasePath      string      `json:"base_path"`
@@ -31,6 +36,7 @@ type Config struct {
 	Domain        string      `json:"domain"`
 	CertDir       string      `json:"cert_dir"`
 	Gmail         GmailConfig `json:"gmail"`
+	Telegram      TelegramConfig `json:"telegram"`
 	NotifyDays    []int       `json:"notify_days"`
 	PingInterval  int         `json:"ping_interval"`
 }

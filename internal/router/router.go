@@ -75,8 +75,10 @@ func Setup(r *gin.Engine, h *api.Handler, cfg *config.Config, database *gorm.DB,
 			// Settings
 			protected.GET("/settings", h.GetSettings)
 			protected.PUT("/settings", h.UpdateSettings)
+			protected.POST("/settings/gmail/test", h.TestGmailSend)
 			protected.GET("/settings/gmail/auth-url", h.GmailAuthURL)
 			protected.POST("/settings/gmail/callback", h.GmailCallback)
+			protected.POST("/settings/telegram/test", h.TestTelegramSend)
 
 			// System
 			protected.GET("/system/version", h.SystemVersion)

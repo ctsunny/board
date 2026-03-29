@@ -81,6 +81,7 @@ type AuditLog struct {
 	ResourceID uint      `json:"resource_id"`
 	Detail     string    `json:"detail"`
 	IP         string    `json:"ip"`
+	Operator   string    `json:"operator"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 

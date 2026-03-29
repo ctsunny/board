@@ -194,12 +194,12 @@
           <el-col :span="12">
             <el-form-item label="线路">
               <el-select
-                v-model="form.route_name"
-                clearable
+                v-model="form.route_names"
+                multiple
                 filterable
                 allow-create
                 default-first-option
-                placeholder="可选下拉或自定义"
+                placeholder="可多选下拉或自定义"
                 style="width:100%"
               >
                 <el-option
@@ -214,12 +214,12 @@
           <el-col :span="12">
             <el-form-item label="服务器">
               <el-select
-                v-model="form.server_name"
-                clearable
+                v-model="form.server_names"
+                multiple
                 filterable
                 allow-create
                 default-first-option
-                placeholder="可选下拉或自定义"
+                placeholder="可多选下拉或自定义"
                 style="width:100%"
               >
                 <el-option
@@ -234,12 +234,12 @@
           <el-col :span="12">
             <el-form-item label="节点">
               <el-select
-                v-model="form.node_name"
-                clearable
+                v-model="form.node_names"
+                multiple
                 filterable
                 allow-create
                 default-first-option
-                placeholder="可选下拉或自定义"
+                placeholder="可多选下拉或自定义"
                 style="width:100%"
               >
                 <el-option
@@ -328,9 +328,9 @@ const form = reactive({
   amount: 0,
   expires_at: '',
   region_name: '',
-  route_name: '',
-  server_name: '',
-  node_name: '',
+  route_names: [] as string[],
+  server_names: [] as string[],
+  node_names: [] as string[],
   remark: '',
   tags: '',
 })
@@ -362,6 +362,26 @@ function trimText(value: unknown): string {
   return String(value ?? '').trim()
 }
 
+function splitMultiValue(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => trimText(item))
+      .filter(Boolean)
+  }
+  return String(value ?? '')
+    .split(/[，,]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function joinMultiValue(values: unknown): string {
+  if (!Array.isArray(values)) return trimText(values)
+  return values
+    .map((item) => trimText(item))
+    .filter(Boolean)
+    .join(', ')
+}
+
 function buildPayload() {
   const payload: Record<string, unknown> = {
     name: trimText(form.name),
@@ -370,9 +390,9 @@ function buildPayload() {
     billing_type: form.billing_type,
     amount: form.amount,
     region_name: trimText(form.region_name),
-    route_name: trimText(form.route_name),
-    server_name: trimText(form.server_name),
-    node_name: trimText(form.node_name),
+    route_name: joinMultiValue(form.route_names),
+    server_name: joinMultiValue(form.server_names),
+    node_name: joinMultiValue(form.node_names),
     remark: trimText(form.remark),
     tags: trimText(form.tags),
   }
@@ -454,9 +474,9 @@ function openCreate() {
     amount: 0,
     expires_at: '',
     region_name: '',
-    route_name: '',
-    server_name: '',
-    node_name: '',
+    route_names: [],
+    server_names: [],
+    node_names: [],
     remark: '',
     tags: '',
   })
@@ -473,9 +493,9 @@ function openEdit(row: Record<string, unknown>) {
     amount: row.amount ?? 0,
     expires_at: formatDateForForm(row.expires_at),
     region_name: row.region_name ?? '',
-    route_name: row.route_name ?? '',
-    server_name: row.server_name ?? '',
-    node_name: row.node_name ?? '',
+    route_names: splitMultiValue(row.route_name),
+    server_names: splitMultiValue(row.server_name),
+    node_names: splitMultiValue(row.node_name),
     remark: row.remark ?? '',
     tags: Array.isArray(row.tags) ? (row.tags as string[]).join(',') : row.tags ?? '',
   })

@@ -9,7 +9,7 @@
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="name" label="名称" min-width="120" />
         <el-table-column prop="ip" label="IP地址" width="140" />
-        <el-table-column prop="location" label="位置" width="120" />
+        <el-table-column prop="location" label="地区" width="120" />
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
             <span class="status-dot" :class="row.status || 'unknown'" />
@@ -43,8 +43,15 @@
         <el-form-item label="IP" prop="ip">
           <el-input v-model="form.ip" placeholder="192.168.1.1" />
         </el-form-item>
-        <el-form-item label="位置">
-          <el-input v-model="form.location" placeholder="北京/上海/香港" />
+        <el-form-item label="地区">
+          <el-select v-model="form.location" clearable filterable placeholder="选择地区" style="width:100%">
+            <el-option
+              v-for="region in regionOptions"
+              :key="region"
+              :label="region"
+              :value="region"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="form.remark" type="textarea" :rows="2" />
@@ -59,11 +66,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { serversApi } from '@/api'
-import { formatDate } from '@/utils'
+import { serversApi, regionsApi } from '@/api'
+import { formatDate, getListData } from '@/utils'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -71,10 +78,19 @@ import type { FormInstance, FormRules } from 'element-plus'
 const loading = ref(false)
 const saving = ref(false)
 const list = ref<Record<string, unknown>[]>([])
+const regions = ref<Record<string, unknown>[]>([])
 const dialogVisible = ref(false)
 const editRow = ref<Record<string, unknown> | null>(null)
 const pingingId = ref<number | null>(null)
 const formRef = ref<FormInstance>()
+
+const regionOptions = computed(() => {
+  const options = regions.value
+    .map((region) => String(region.name ?? '').trim())
+    .filter(Boolean)
+  const current = String(form.location ?? '').trim()
+  return current && !options.includes(current) ? options.concat(current) : options
+})
 
 const form = reactive({ name: '', ip: '', location: '', remark: '' })
 const rules: FormRules = {
@@ -92,6 +108,15 @@ async function loadData() {
     list.value = []
   } finally {
     loading.value = false
+  }
+}
+
+async function loadRegions() {
+  try {
+    const res = await regionsApi.list()
+    regions.value = getListData(res.data)
+  } catch {
+    regions.value = []
   }
 }
 
@@ -153,7 +178,10 @@ async function handleDelete(row: Record<string, unknown>) {
   }
 }
 
-onMounted(loadData)
+onMounted(() => {
+  loadData()
+  loadRegions()
+})
 </script>
 
 <style scoped>

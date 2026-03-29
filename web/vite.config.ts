@@ -25,14 +25,5 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'element-plus': ['element-plus'],
-          'echarts': ['echarts', 'vue-echarts'],
-          'vendor': ['vue', 'vue-router', 'pinia', 'axios', 'dayjs'],
-        },
-      },
-    },
   },
 })

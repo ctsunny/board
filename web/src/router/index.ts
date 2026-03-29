@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { getBoardBaseHref } from '@/utils/runtime'
 
 const routes = [
   {
@@ -29,7 +30,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHashHistory(),
+  history: createWebHashHistory(getBoardBaseHref()),
   routes,
 })
 

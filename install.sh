@@ -226,19 +226,37 @@ install() {
     fi
 }
 
-uninstall() {
-    check_root
-    print_warn "Uninstalling Board..."
-
+remove_installation() {
     systemctl stop "${SERVICE_NAME}" 2>/dev/null || true
     systemctl disable "${SERVICE_NAME}" 2>/dev/null || true
     rm -f "${SERVICE_FILE}"
     systemctl daemon-reload
 
     rm -f "${INSTALL_DIR}/${BINARY_NAME}"
+}
+
+uninstall() {
+    check_root
+    print_warn "Uninstalling Board..."
+
+    remove_installation
     print_warn "Config and data directories (${CONFIG_DIR}, ${DATA_DIR}) are preserved."
     print_warn "Remove them manually if needed: rm -rf ${CONFIG_DIR} ${DATA_DIR}"
     print_info "Board uninstalled."
+}
+
+purge() {
+    check_root
+    print_warn "This will completely remove Board, including all config and historical data."
+    read -rp "Type YES to continue: " confirm
+    if [[ "${confirm}" != "YES" ]]; then
+        print_info "Cancelled."
+        return
+    fi
+
+    remove_installation
+    rm -rf "${CONFIG_DIR}" "${DATA_DIR}"
+    print_info "Board and all data have been removed."
 }
 
 update() {
@@ -296,6 +314,7 @@ show_help() {
     printf "  ${GREEN}%-12s${NC} %s\n" "install"   "Install Board"
     printf "  ${GREEN}%-12s${NC} %s\n" "update"    "Update to latest version"
     printf "  ${GREEN}%-12s${NC} %s\n" "uninstall" "Uninstall Board"
+    printf "  ${GREEN}%-12s${NC} %s\n" "purge"     "Completely uninstall Board and remove all data"
     printf "  ${GREEN}%-12s${NC} %s\n" "start"     "Start service"
     printf "  ${GREEN}%-12s${NC} %s\n" "stop"      "Stop service"
     printf "  ${GREEN}%-12s${NC} %s\n" "restart"   "Restart service"
@@ -311,24 +330,26 @@ show_menu() {
     printf "  ${GREEN}1)${NC} 安装 Board\n"
     printf "  ${GREEN}2)${NC} 更新 Board\n"
     printf "  ${GREEN}3)${NC} 卸载 Board\n"
-    printf "  ${GREEN}4)${NC} 启动服务\n"
-    printf "  ${GREEN}5)${NC} 停止服务\n"
-    printf "  ${GREEN}6)${NC} 重启服务\n"
-    printf "  ${GREEN}7)${NC} 查看状态\n"
-    printf "  ${GREEN}8)${NC} 查看日志\n"
+    printf "  ${GREEN}4)${NC} 彻底卸载（包含所有数据）\n"
+    printf "  ${GREEN}5)${NC} 启动服务\n"
+    printf "  ${GREEN}6)${NC} 停止服务\n"
+    printf "  ${GREEN}7)${NC} 重启服务\n"
+    printf "  ${GREEN}8)${NC} 查看状态\n"
+    printf "  ${GREEN}9)${NC} 查看日志\n"
     printf "  ${GREEN}0)${NC} 退出\n"
     print_banner "╚════════════════════════════════════════════════════════╝"
     echo ""
-    read -rp "请选择操作 [0-8]: " choice
+    read -rp "请选择操作 [0-9]: " choice
     case "${choice}" in
         1) install ;;
         2) update ;;
         3) uninstall ;;
-        4) start_service ;;
-        5) stop_service ;;
-        6) restart_service ;;
-        7) show_status ;;
-        8) show_log ;;
+        4) purge ;;
+        5) start_service ;;
+        6) stop_service ;;
+        7) restart_service ;;
+        8) show_status ;;
+        9) show_log ;;
         0) exit 0 ;;
         *) print_error "无效选项: ${choice}"; show_menu ;;
     esac
@@ -338,6 +359,7 @@ show_menu() {
 case "${1:-}" in
     install)    install ;;
     uninstall)  uninstall ;;
+    purge)      purge ;;
     update)     update ;;
     start)      start_service ;;
     stop)       stop_service ;;

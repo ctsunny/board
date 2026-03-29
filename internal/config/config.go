@@ -26,19 +26,19 @@ type TelegramConfig struct {
 }
 
 type Config struct {
-	Port          int         `json:"port"`
-	BasePath      string      `json:"base_path"`
-	AdminUser     string      `json:"admin_user"`
-	AdminPass     string      `json:"admin_pass"`
-	AdminPassword string      `json:"admin_password"` // plain text, used only for displaying initial credentials; file is 0600 root-only
-	JWTSecret     string      `json:"jwt_secret"`
-	DBPath        string      `json:"db_path"`
-	Domain        string      `json:"domain"`
-	CertDir       string      `json:"cert_dir"`
-	Gmail         GmailConfig `json:"gmail"`
+	Port          int            `json:"port"`
+	BasePath      string         `json:"base_path"`
+	AdminUser     string         `json:"admin_user"`
+	AdminPass     string         `json:"admin_pass"`
+	AdminPassword string         `json:"admin_password"` // plain text, used only for displaying initial credentials; file is 0600 root-only
+	JWTSecret     string         `json:"jwt_secret"`
+	DBPath        string         `json:"db_path"`
+	Domain        string         `json:"domain"`
+	CertDir       string         `json:"cert_dir"`
+	Gmail         GmailConfig    `json:"gmail"`
 	Telegram      TelegramConfig `json:"telegram"`
-	NotifyDays    []int       `json:"notify_days"`
-	PingInterval  int         `json:"ping_interval"`
+	NotifyDays    []int          `json:"notify_days"`
+	PingInterval  int            `json:"ping_interval"`
 }
 
 func Load(path string) (*Config, error) {

@@ -186,7 +186,20 @@ func (h *Handler) ListCustomers(c *gin.Context) {
 
 	sortField := c.DefaultQuery("sort", "created_at")
 	sortOrder := c.DefaultQuery("order", "desc")
-	allowedSort := map[string]bool{"created_at": true, "expires_at": true, "name": true, "amount": true, "status": true}
+	allowedSort := map[string]bool{
+		"created_at":   true,
+		"id":           true,
+		"name":         true,
+		"contact":      true,
+		"region_name":  true,
+		"route_name":   true,
+		"server_name":  true,
+		"node_name":    true,
+		"status":       true,
+		"billing_type": true,
+		"expires_at":   true,
+		"amount":       true,
+	}
 	if !allowedSort[sortField] {
 		sortField = "created_at"
 	}
@@ -644,34 +657,34 @@ func generateAPIToken() (string, error) {
 
 func (h *Handler) GetSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"port":              h.Cfg.Port,
-		"base_path":         h.Cfg.BasePath,
-		"domain":            h.Cfg.Domain,
-		"notify_days":       h.Cfg.NotifyDays,
-		"ping_interval":     h.Cfg.PingInterval,
-		"gmail_from":        h.Cfg.Gmail.FromEmail,
-		"gmail_admin":       h.Cfg.Gmail.AdminEmail,
-		"gmail_admin_email": h.Cfg.Gmail.AdminEmail,
-		"gmail_client_id":   h.Cfg.Gmail.ClientID,
-		"gmail_oauth_ok":    h.Cfg.Gmail.RefreshToken != "",
-		"gmail_configured":  h.Cfg.Gmail.RefreshToken != "",
-		"telegram_bot_token": h.Cfg.Telegram.BotToken,
-		"telegram_chat_id":   h.Cfg.Telegram.ChatID,
+		"port":                h.Cfg.Port,
+		"base_path":           h.Cfg.BasePath,
+		"domain":              h.Cfg.Domain,
+		"notify_days":         h.Cfg.NotifyDays,
+		"ping_interval":       h.Cfg.PingInterval,
+		"gmail_from":          h.Cfg.Gmail.FromEmail,
+		"gmail_admin":         h.Cfg.Gmail.AdminEmail,
+		"gmail_admin_email":   h.Cfg.Gmail.AdminEmail,
+		"gmail_client_id":     h.Cfg.Gmail.ClientID,
+		"gmail_oauth_ok":      h.Cfg.Gmail.RefreshToken != "",
+		"gmail_configured":    h.Cfg.Gmail.RefreshToken != "",
+		"telegram_bot_token":  h.Cfg.Telegram.BotToken,
+		"telegram_chat_id":    h.Cfg.Telegram.ChatID,
 		"telegram_configured": h.Telegram != nil && h.Telegram.IsConfigured(),
 	})
 }
 
 func (h *Handler) UpdateSettings(c *gin.Context) {
 	var body struct {
-		Domain            string              `json:"domain"`
-		NotifyDays        []int               `json:"notify_days"`
-		PingInterval      int                 `json:"ping_interval"`
-		GmailClientID     string              `json:"gmail_client_id"`
-		GmailClientSecret string              `json:"gmail_client_secret"`
-		GmailFrom         string              `json:"gmail_from"`
-		GmailAdmin        string              `json:"gmail_admin"`
-		GmailAdminEmail   string              `json:"gmail_admin_email"`
-		Gmail             *config.GmailConfig `json:"gmail"`
+		Domain            string                 `json:"domain"`
+		NotifyDays        []int                  `json:"notify_days"`
+		PingInterval      int                    `json:"ping_interval"`
+		GmailClientID     string                 `json:"gmail_client_id"`
+		GmailClientSecret string                 `json:"gmail_client_secret"`
+		GmailFrom         string                 `json:"gmail_from"`
+		GmailAdmin        string                 `json:"gmail_admin"`
+		GmailAdminEmail   string                 `json:"gmail_admin_email"`
+		Gmail             *config.GmailConfig    `json:"gmail"`
 		TelegramBotToken  string                 `json:"telegram_bot_token"`
 		TelegramChatID    string                 `json:"telegram_chat_id"`
 		Telegram          *config.TelegramConfig `json:"telegram"`
@@ -754,6 +767,10 @@ func (h *Handler) TestGmailSend(c *gin.Context) {
 	}
 	if to == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "recipient email required"})
+		return
+	}
+	if h.Notifier == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "gmail notifier unavailable"})
 		return
 	}
 	if err := h.Notifier.SendEmail(to, "[Board] Test Email", "This is a test email from Board."); err != nil {

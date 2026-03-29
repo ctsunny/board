@@ -35,3 +35,16 @@
 **遗留/风险**：当前“已配置”仍主要表示 OAuth 已完成；若后续想区分“已保存凭据”和“已完成授权”，需再拆分状态字段。
 
 **涉及文件**：`ai.md` `internal/api/handlers.go` `internal/api/handlers_settings_test.go`
+
+---
+### [2026-03-29] 通知与表格
+
+**目的**：补齐测试邮件、TG 绑定提醒、客户地区多选、版本展示与操作日志空白问题。
+
+**思路**：延续现有设置与通知结构，后端扩展最少字段和接口，前端只补缺口并复用现有分页/排序能力。
+
+**关键技术**：通知器改为引用配置以支持保存后即时生效；客户地区继续用逗号串存储多选；审计日志页改读 `PageResult.data`。
+
+**遗留/风险**：TG 绑定目前基于 Bot Token + Chat ID 手工填写；密码错误提醒按 24 小时内每 5 次失败触发。
+
+**涉及文件**：`ai.md` `internal/api/handlers.go` `internal/services/notify.go` `web/src/views/Customers.vue` `web/src/views/Settings.vue` `web/src/views/AuditLogs.vue` `web/src/components/Layout.vue`

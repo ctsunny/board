@@ -39,6 +39,7 @@
           <span class="topbar__title">Board 管理系统</span>
         </div>
         <div class="topbar__right">
+          <el-tag size="small" effect="plain">v{{ version }}</el-tag>
           <el-tag type="success" size="small">管理员</el-tag>
           <span class="admin-name">{{ auth.username }}</span>
           <el-button type="danger" size="small" text @click="handleLogout">
@@ -61,6 +62,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
+import { systemApi } from '@/api'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -69,6 +71,7 @@ const appStore = useAppStore()
 const mobileOpen = ref(false)
 const isMobile = ref(window.innerWidth < 768)
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
+const version = ref('dev')
 
 function toggleSidebar() {
   if (isMobile.value) {
@@ -88,7 +91,19 @@ function handleResize() {
   if (!isMobile.value) mobileOpen.value = false
 }
 
-onMounted(() => window.addEventListener('resize', handleResize))
+async function loadVersion() {
+  try {
+    const res = await systemApi.getVersion()
+    version.value = (res.data as { version?: string }).version || 'dev'
+  } catch {
+    version.value = 'dev'
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('resize', handleResize)
+  loadVersion()
+})
 onUnmounted(() => window.removeEventListener('resize', handleResize))
 
 const menuItems = [

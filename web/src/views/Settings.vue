@@ -78,6 +78,7 @@
             </el-form-item>
             <el-form-item>
               <el-button type="primary" :loading="gmailSaving" @click="saveGmailConfig">保存配置</el-button>
+              <el-button :disabled="!gmailConfigured" @click="sendGmailTest" style="margin-left:10px">发送测试邮件</el-button>
               <el-button @click="getAuthUrl" style="margin-left:10px">获取授权</el-button>
             </el-form-item>
           </el-form>
@@ -100,6 +101,35 @@
           </div>
         </div>
       </el-tab-pane>
+
+      <el-tab-pane label="TG 绑定" name="telegram">
+        <div class="gmail-panel">
+          <div class="gmail-status">
+            <span class="status-label">当前状态：</span>
+            <el-tag :type="telegramConfigured ? 'success' : 'danger'">
+              {{ telegramConfigured ? '✓ 已绑定' : '✗ 未绑定' }}
+            </el-tag>
+          </div>
+          <el-alert
+            title="先给你的机器人发送一条消息，再通过 getUpdates 或 @userinfobot 获取 Chat ID。"
+            type="info"
+            :closable="false"
+            style="max-width:560px;margin-bottom:20px"
+          />
+          <el-form :model="telegramForm" label-width="130px" style="max-width:560px">
+            <el-form-item label="Bot Token">
+              <el-input v-model="telegramForm.bot_token" type="password" placeholder="输入 Telegram Bot Token" show-password />
+            </el-form-item>
+            <el-form-item label="Chat ID">
+              <el-input v-model="telegramForm.chat_id" placeholder="输入接收提醒的 Chat ID" />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" :loading="telegramSaving" @click="saveTelegramConfig">保存绑定</el-button>
+              <el-button :disabled="!telegramConfigured" @click="sendTelegramTest" style="margin-left:10px">发送测试消息</el-button>
+            </el-form-item>
+          </el-form>
+        </div>
+      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
@@ -113,8 +143,10 @@ import PageHeader from '@/components/PageHeader.vue'
 const activeTab = ref('basic')
 const basicSaving = ref(false)
 const gmailSaving = ref(false)
+const telegramSaving = ref(false)
 const submitting = ref(false)
 const gmailConfigured = ref(false)
+const telegramConfigured = ref(false)
 const callbackCode = ref('')
 
 const basicForm = reactive({
@@ -128,6 +160,11 @@ const gmailForm = reactive({
   admin_email: '',
 })
 
+const telegramForm = reactive({
+  bot_token: '',
+  chat_id: '',
+})
+
 async function loadSettings() {
   try {
     const res = await settingsApi.get()
@@ -137,6 +174,9 @@ async function loadSettings() {
     if (d.gmail_client_id) gmailForm.client_id = d.gmail_client_id as string
     if (d.gmail_admin_email) gmailForm.admin_email = d.gmail_admin_email as string
     gmailConfigured.value = !!(d.gmail_configured || d.gmail_client_id)
+    if (d.telegram_bot_token) telegramForm.bot_token = d.telegram_bot_token as string
+    if (d.telegram_chat_id) telegramForm.chat_id = d.telegram_chat_id as string
+    telegramConfigured.value = !!(d.telegram_configured || (d.telegram_bot_token && d.telegram_chat_id))
   } catch { /* ignore */ }
 }
 
@@ -172,6 +212,15 @@ async function saveGmailConfig() {
   }
 }
 
+async function sendGmailTest() {
+  try {
+    await settingsApi.testGmailSend(gmailForm.admin_email)
+    ElMessage.success('测试邮件已发送')
+  } catch {
+    ElMessage.error('测试邮件发送失败')
+  }
+}
+
 async function getAuthUrl() {
   try {
     const res = await settingsApi.getGmailAuthUrl()
@@ -201,6 +250,31 @@ async function submitCallback() {
     ElMessage.error('授权失败，请检查授权码是否正确')
   } finally {
     submitting.value = false
+  }
+}
+
+async function saveTelegramConfig() {
+  telegramSaving.value = true
+  try {
+    await settingsApi.update({
+      telegram_bot_token: telegramForm.bot_token,
+      telegram_chat_id: telegramForm.chat_id,
+    })
+    telegramConfigured.value = !!(telegramForm.bot_token && telegramForm.chat_id)
+    ElMessage.success('TG 绑定保存成功')
+  } catch {
+    ElMessage.error('保存失败')
+  } finally {
+    telegramSaving.value = false
+  }
+}
+
+async function sendTelegramTest() {
+  try {
+    await settingsApi.testTelegramSend()
+    ElMessage.success('TG 测试消息已发送')
+  } catch {
+    ElMessage.error('TG 测试消息发送失败')
   }
 }
 

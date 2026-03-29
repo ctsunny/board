@@ -8,6 +8,8 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
+VERSION_NOT_INSTALLED="未安装"
+VERSION_FETCH_FAILED="获取失败"
 
 GITHUB_REPO="ctsunny/board"
 INSTALL_DIR="/usr/local/bin"
@@ -103,7 +105,7 @@ get_latest_version_quiet() {
 }
 
 get_installed_version() {
-    INSTALLED_VERSION="未安装"
+    INSTALLED_VERSION="${VERSION_NOT_INSTALLED}"
 
     if [[ -x "${INSTALL_DIR}/${BINARY_NAME}" ]]; then
         local version_output
@@ -227,7 +229,7 @@ EOF
 }
 
 escape_sed_replacement() {
-    printf '%s' "${1}" | sed -e 's/[&|]/\\&/g'
+    printf '%s' "${1}" | sed -e 's/[\/&|\\]/\\&/g'
 }
 
 update_config_string() {
@@ -265,6 +267,9 @@ configure_tls() {
             update_config_string "domain" "${domain}"
             update_config_string "cert_dir" "${cert_dir}"
 
+            if command -v getent &>/dev/null && ! getent ahosts "${domain}" >/dev/null 2>&1; then
+                print_warn "当前未检测到 ${domain} 的 DNS 解析结果，证书申请可能失败。"
+            fi
             print_warn "请确保域名已解析到本机，并已放通 80/443 端口。"
             systemctl restart "${SERVICE_NAME}"
             sleep 2
@@ -419,7 +424,7 @@ show_menu() {
     get_installed_version
     get_latest_version_quiet
     if [[ -z "${LATEST_VERSION}" ]]; then
-        LATEST_VERSION="获取失败"
+        LATEST_VERSION="${VERSION_FETCH_FAILED}"
     fi
 
     echo ""

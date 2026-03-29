@@ -52,6 +52,28 @@
       </el-col>
     </el-row>
 
+    <el-card style="margin-top:20px">
+      <template #header><span>客户面板</span></template>
+      <div v-if="recentCustomers.length === 0" class="empty-tip">暂无客户数据</div>
+      <el-table v-else :data="recentCustomers" size="small" style="width:100%">
+        <el-table-column prop="name" label="客户" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="contact" label="联系方式" min-width="140" show-overflow-tooltip />
+        <el-table-column label="资源信息" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ [row.region_name, row.route_name, row.server_name, row.node_name].filter(Boolean).join(' / ') || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <StatusBadge :status="row.status || 'unknown'" />
+          </template>
+        </el-table-column>
+        <el-table-column label="到期日" width="130">
+          <template #default="{ row }">{{ formatDate(row.expires_at, 'YYYY-MM-DD') }}</template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
     <!-- Recent audit logs -->
     <el-card style="margin-top:20px">
       <template #header><span>最近操作日志</span></template>
@@ -159,7 +181,7 @@ async function loadData() {
 
   try {
     const sRes = await serversApi.list()
-    servers.value = getList(sRes.data) as ServerItem[]
+    servers.value = getList(sRes.data) as unknown as ServerItem[]
   } catch {
     servers.value = []
   }

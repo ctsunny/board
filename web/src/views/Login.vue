@@ -3,7 +3,7 @@
     <div class="login-card">
       <div class="login-logo">
         <el-icon class="logo-icon"><Monitor /></el-icon>
-        <h1>Board 管理系统</h1>
+        <h1>客户管理系统</h1>
         <p class="login-subtitle">直播客户管理平台</p>
       </div>
 

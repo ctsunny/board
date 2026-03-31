@@ -160,9 +160,10 @@ func buildRawEmail(from, to, subject, body string) string {
 }
 
 func sanitizeHeaderValue(value string) string {
+	value = strings.ReplaceAll(value, "\r\n", " ")
 	value = strings.ReplaceAll(value, "\r", " ")
 	value = strings.ReplaceAll(value, "\n", " ")
-	return strings.TrimSpace(value)
+	return strings.Join(strings.Fields(value), " ")
 }
 
 func formatExpiryReminderSubject(customer models.Customer) string {

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -143,6 +144,10 @@ func (n *TelegramNotifier) SendMessage(text string) error {
 }
 
 func buildRawEmail(from, to, subject, body string) string {
+	from = sanitizeHeaderValue(from)
+	to = sanitizeHeaderValue(to)
+	subject = mime.QEncoding.Encode("UTF-8", sanitizeHeaderValue(subject))
+
 	var sb strings.Builder
 	sb.WriteString("From: " + from + "\r\n")
 	sb.WriteString("To: " + to + "\r\n")
@@ -154,20 +159,35 @@ func buildRawEmail(from, to, subject, body string) string {
 	return sb.String()
 }
 
+func sanitizeHeaderValue(value string) string {
+	value = strings.ReplaceAll(value, "\r", " ")
+	value = strings.ReplaceAll(value, "\n", " ")
+	return strings.TrimSpace(value)
+}
+
+func formatExpiryReminderSubject(customer models.Customer) string {
+	return fmt.Sprintf("到期提醒 %s %s", customer.Name, customer.ExpiresAt.Format("2006-01-02"))
+}
+
+func formatServerDownAlertSubject(server models.Server, alertAt time.Time) string {
+	return fmt.Sprintf("离线提醒 %s %s", server.Name, alertAt.Format("2006-01-02"))
+}
+
 func (n *GmailNotifier) SendExpiryReminder(customer models.Customer, daysLeft int) error {
-	subject := fmt.Sprintf("[Board] Customer %s expires in %d day(s)", customer.Name, daysLeft)
+	subject := formatExpiryReminderSubject(customer)
 	body := fmt.Sprintf(
-		"Customer expiry reminder\n\nName: %s\nContact: %s\nExpires: %s\nDays left: %d\n",
+		"到期提醒\n\n客户：%s\n联系方式：%s\n到期日期：%s\n剩余天数：%d\n请及时跟进续费。\n",
 		customer.Name, customer.Contact, customer.ExpiresAt.Format("2006-01-02"), daysLeft,
 	)
 	return n.SendEmail(n.cfg.AdminEmail, subject, body)
 }
 
 func (n *GmailNotifier) SendServerDownAlert(server models.Server) error {
-	subject := fmt.Sprintf("[Board] Server %s is OFFLINE", server.Name)
+	alertAt := time.Now()
+	subject := formatServerDownAlertSubject(server, alertAt)
 	body := fmt.Sprintf(
-		"Server down alert\n\nName: %s\nIP: %s\nLocation: %s\nTime: %s\n",
-		server.Name, server.IP, server.Location, time.Now().Format(time.RFC3339),
+		"离线提醒\n\n服务器：%s\nIP：%s\n位置：%s\n告警时间：%s\n请尽快检查服务器状态。\n",
+		server.Name, server.IP, server.Location, alertAt.Format("2006-01-02 15:04:05"),
 	)
 	return n.SendEmail(n.cfg.AdminEmail, subject, body)
 }
@@ -236,13 +256,13 @@ func checkAndNotifyExpiry(database *gorm.DB, cfg *config.Config, notifier *Gmail
 			logNotification(database, models.NotificationLog{
 				Type:           "expiry_email",
 				RecipientEmail: cfg.Gmail.AdminEmail,
-				Subject:        fmt.Sprintf("Customer %s expires in %d day(s)", customer.Name, days),
+				Subject:        formatExpiryReminderSubject(customer),
 			}, notifier != nil && notifier.IsConfigured(), func() error {
 				return notifier.SendExpiryReminder(customer, days)
 			})
 			logNotification(database, models.NotificationLog{
 				Type:    "expiry_tg",
-				Subject: fmt.Sprintf("Customer %s expires in %d day(s)", customer.Name, days),
+				Subject: formatExpiryReminderSubject(customer),
 			}, telegram != nil && telegram.IsConfigured(), func() error {
 				return telegram.SendExpiryReminder(customer, days)
 			})

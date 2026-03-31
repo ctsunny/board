@@ -87,7 +87,7 @@ func runPingCycle(database *gorm.DB, notifier *GmailNotifier) {
 				}
 				database.Create(&models.NotificationLog{
 					Type:    "server_down",
-					Subject: fmt.Sprintf("Server %s is offline", srv.Name),
+					Subject: formatServerDownAlertSubject(srv, now),
 					Status:  status,
 					Error:   errMsg,
 				})

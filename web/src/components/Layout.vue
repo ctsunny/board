@@ -7,7 +7,7 @@
     <aside class="sidebar" :class="{ 'mobile-open': mobileOpen }">
       <div class="sidebar__brand">
         <el-icon class="brand-icon"><Monitor /></el-icon>
-        <span class="brand-name">Board</span>
+        <span class="brand-name">客户管理</span>
       </div>
       <nav class="sidebar__nav">
         <router-link
@@ -36,7 +36,7 @@
           >
             <el-icon size="20"><Expand /></el-icon>
           </el-button>
-          <span class="topbar__title">Board 管理系统</span>
+          <span class="topbar__title">客户管理系统</span>
         </div>
         <div class="topbar__right">
           <el-tag size="small" effect="plain">v{{ version }}</el-tag>

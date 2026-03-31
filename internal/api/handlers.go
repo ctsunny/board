@@ -773,7 +773,10 @@ func (h *Handler) TestGmailSend(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "gmail notifier unavailable"})
 		return
 	}
-	if err := h.Notifier.SendEmail(to, "[Board] Test Email", "This is a test email from Board."); err != nil {
+	now := time.Now()
+	subject := fmt.Sprintf("测试邮件 %s", now.Format("2006-01-02"))
+	bodyText := fmt.Sprintf("测试邮件\n\n这是一封来自客户管理系统的测试邮件。\n发送时间：%s\n", now.Format("2006-01-02 15:04:05"))
+	if err := h.Notifier.SendEmail(to, subject, bodyText); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -819,7 +822,7 @@ func (h *Handler) TestTelegramSend(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "telegram not configured"})
 		return
 	}
-	if err := h.Telegram.SendMessage("✅ Board TG 测试消息"); err != nil {
+	if err := h.Telegram.SendMessage("✅ 客户管理系统 TG 测试消息"); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
